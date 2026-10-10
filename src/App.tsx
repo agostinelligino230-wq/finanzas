@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
+import AuthGate from "./components/AuthGate";
 import ExpensesPage from "./components/ExpensesPage";
 import SavingsPage from "./components/SavingsPage";
 import SuggestionsPage from "./components/SuggestionsPage";
@@ -7,6 +8,7 @@ import FixedExpensesPage from "./components/FixedExpensesPage";
 
 export default function App() {
   return (
+    <AuthGate>
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
@@ -17,5 +19,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </AuthGate>
   );
 }
