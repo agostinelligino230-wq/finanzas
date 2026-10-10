@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Menu, X, CircleDollarSign, Receipt, PiggyBank, Lightbulb, Sun, Moon, CalendarClock, LogOut } from "lucide-react";
 import { useAuth } from "./AuthGate";
+import { prefetchAll } from "../lib/cache";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -16,9 +17,10 @@ const items = [
 export default function Layout() {
   const [open, setOpen] = useState(false);
 const { user, signOut } = useAuth();
+useEffect(() => { prefetchAll(user.id); }, [user.id]);
   const [dark, setDark] = useState(() => {
     if (typeof window === "undefined") return false;
-    return localStorage.getItem("finanzas-theme") === "dark";
+    const stored = localStorage.getItem("finanzas-theme"); return stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
   const location = useLocation();
   const active = items.find((item) => item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to));

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type FormEvent, type Re
 import type { Session, User } from "@supabase/supabase-js";
 import { CircleDollarSign } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { clearCache } from "../lib/cache";
 
 type AuthValue = { user: User; signOut: () => Promise<void> };
 const AuthContext = createContext<AuthValue | null>(null);
@@ -14,7 +15,8 @@ export function useAuth() {
 
 function applyTheme() {
   try {
-    document.documentElement.dataset.theme = localStorage.getItem("finanzas-theme") === "dark" ? "dark" : "light";
+    const stored = localStorage.getItem("finanzas-theme");
+    document.documentElement.dataset.theme = (stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
   } catch {
     document.documentElement.dataset.theme = "light";
   }
@@ -106,6 +108,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   if (!session) return <LoginForm />;
 
   const signOut = async () => {
+    clearCache();
     await supabase?.auth.signOut();
   };
 
