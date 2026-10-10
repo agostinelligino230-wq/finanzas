@@ -2,7 +2,7 @@
 
 ## Descripción
 
-Aplicación simplificada de finanzas personales con dos áreas principales: registro diario de gastos y metas de ahorro. Funciona con datos demo locales hasta conectar un backend.
+Aplicación simplificada de finanzas personales con registro diario de gastos, gastos fijos, metas de ahorro y autenticación por email mediante Supabase.
 
 ## Stack
 
@@ -32,7 +32,7 @@ npm run build  # build de producción → dist/
 
 ## Datos y backend
 
-La app ya incluye la estructura de persistencia para movimientos, gastos fijos y metas de ahorro mediante Supabase. Mientras no haya un proyecto conectado y el usuario no haya iniciado sesión, la interfaz continúa usando datos demo locales. Conectá un proyecto desde el panel Backend de Cosmos y aplicá la migración `001_finanzas_persistencia.sql` para habilitar el almacenamiento seguro por usuario.
+La app usa Supabase Auth para registro e ingreso con email y contraseña. Sin una sesión activa solo se muestra la pantalla de ingreso. Conectá un proyecto desde el panel Backend de Cosmos y aplicá la migración `001_finanzas_persistencia.sql` para habilitar el almacenamiento seguro por usuario.
 
 ## Deploy en Vercel
 
