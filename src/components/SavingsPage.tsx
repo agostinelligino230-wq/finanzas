@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { readCache, writeCache } from "../lib/cache";
 import { useAuth } from "./AuthGate";
 import { Airplay, Banknote, Laptop, PiggyBank, Plus, Smartphone, Target, Trash2 } from "lucide-react";
 
@@ -12,7 +13,7 @@ const detectIcon = (name: string): Goal["icon"] => { const value = name.toLowerC
 const iconFor = (icon: Goal["icon"]) => icon === "phone" ? Smartphone : icon === "laptop" ? Laptop : icon === "trip" ? Airplay : PiggyBank;
 
 export default function SavingsPage() {
-  const { user } = useAuth(); const [goals, setGoals] = useState<Goal[]>([]); const [error, setError] = useState(""); useEffect(() => { if (!supabase) return; let active = true; supabase.from("savings_goals").select("*").order("created_at", { ascending: false }).then(({ data, error: loadError }) => { if (!active) return; if (loadError) setError("No se pudieron cargar las metas."); else setGoals(((data ?? []) as GoalRow[]).map(fromRow)); }); return () => { active = false; }; }, [user.id]); const [name, setName] = useState(""); const [target, setTarget] = useState(""); const [saved, setSaved] = useState(""); const [period, setPeriod] = useState<Goal["period"]>("mensual");
+  const { user } = useAuth(); const [goals, setGoals] = useState<Goal[]>(() => readCache<Goal[]>("savings_goals", user.id) ?? (readCache<GoalRow[]>("raw:savings_goals", user.id) ?? []).map(fromRow)); useEffect(() => { writeCache("savings_goals", user.id, goals); }, [goals, user.id]); const [error, setError] = useState(""); useEffect(() => { if (!supabase) return; let active = true; supabase.from("savings_goals").select("*").order("created_at", { ascending: false }).then(({ data, error: loadError }) => { if (!active) return; if (loadError) setError("No se pudieron cargar las metas."); else setGoals(((data ?? []) as GoalRow[]).map(fromRow)); }); return () => { active = false; }; }, [user.id]); const [name, setName] = useState(""); const [target, setTarget] = useState(""); const [saved, setSaved] = useState(""); const [period, setPeriod] = useState<Goal["period"]>("mensual");
   const totalTarget = useMemo(() => goals.reduce((sum, goal) => sum + goal.target, 0), [goals]);
   const totalSaved = useMemo(() => goals.reduce((sum, goal) => sum + goal.saved, 0), [goals]);
   const addGoal = async () => { const numericTarget = Number(normalizeDigits(target)); const numericSaved = Number(normalizeDigits(saved)) || 0; if (!name.trim() || !(numericTarget > 0) || numericSaved < 0 || !supabase) return; const { data, error: saveError } = await supabase.from("savings_goals").insert({ user_id: user.id, name: name.trim(), target: numericTarget, saved: numericSaved, period, icon: detectIcon(name) }).select().single(); if (saveError || !data) { setError("No se pudo guardar la meta. Probá de nuevo."); return; } setError(""); setGoals((current) => [fromRow(data as GoalRow), ...current]); setName(""); setTarget(""); setSaved(""); setPeriod("mensual"); };
