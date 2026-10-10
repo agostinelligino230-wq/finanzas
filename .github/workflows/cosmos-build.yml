@@ -1,0 +1,62 @@
+name: Cosmos Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check lockfile
+        id: check
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Generate lockfile
+        if: steps.check.outputs.present == 'false'
+        run: npm install --package-lock-only --ignore-scripts
+      # PR automático con el lockfile — GITHUB_TOKEN del propio repo, sin secretos extra.
+      # No corre en pull_request: el token de un PR no puede abrir otro PR.
+      - name: Open lockfile PR
+        if: steps.check.outputs.present == 'false' && github.event_name != 'pull_request'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: add lockfile"
+          title: "chore: add lockfile"
+          body: "package-lock.json generado automáticamente para builds reproducibles."
+          branch: cosmos/add-lockfile
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --ignore-scripts
+          else
+            npm install --ignore-scripts
+          fi
+      - name: Build
+        run: npm run build
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
