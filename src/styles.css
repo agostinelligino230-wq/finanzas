@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
 :root {
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   color: #403b38;
