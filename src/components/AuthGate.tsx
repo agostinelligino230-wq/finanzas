@@ -37,18 +37,18 @@ function explain(error: { message?: string; status?: number } | null | undefined
 }
 
 const cleanEmail = (value: string) => value.trim().toLowerCase();
-const inputClass = "h-11 w-full rounded-xl border border-[#d8d1c8] bg-[#fffdfa] px-3 text-base dark:border-[#4a433e] dark:bg-[#302c29]";
-const primaryButton = "inline-flex h-11 w-full items-center justify-center rounded-xl bg-[#6e607c] text-base font-semibold text-white hover:bg-[#5d506a] disabled:opacity-60";
-const linkButton = "text-sm font-medium text-[#6e607c] hover:text-[#51465d] dark:text-[#c9b7d8]";
+const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-base";
+const primaryButton = "inline-flex h-11 w-full items-center justify-center rounded-xl bg-[var(--primary)] text-base font-semibold text-white hover:bg-[var(--primary-strong)] disabled:opacity-60";
+const linkButton = "text-sm font-medium text-[var(--primary)] hover:text-[var(--primary-text)]";
 
 function Screen({ children }: { children: ReactNode }) {
   useEffect(applyTheme, []);
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f3f0eb] p-4 text-[#3f3b39] dark:bg-[#1d1b1a] dark:text-[#eee9e3]">
-      <div className="w-full max-w-sm rounded-3xl border border-[#ded8d0] bg-[#f8f6f2] p-6 dark:border-[#3a3532] dark:bg-[#252220]">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] p-4 text-[var(--text)]">
+      <div className="w-full max-w-sm rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-6">
         <div className="mb-6 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#d8cceb] text-[#51465d]"><CircleDollarSign size={21} /></span>
-          <div><p className="font-semibold">Finanzas</p><p className="text-sm text-[#8b837c] dark:text-[#b5aca5]">tu mes, más claro</p></div>
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><CircleDollarSign size={21} /></span>
+          <div><p className="font-semibold">Finanzas</p><p className="text-sm text-[var(--muted)]">tu mes, más claro</p></div>
         </div>
         {children}
       </div>
@@ -61,7 +61,7 @@ function PasswordInput({ value, onChange, autoComplete }: { value: string; onCha
   return (
     <div className="relative">
       <input type={visible ? "text" : "password"} autoComplete={autoComplete} autoCapitalize="none" autoCorrect="off" spellCheck={false} value={value} onChange={(event) => onChange(event.target.value)} className={inputClass + " pr-12"} />
-      <button type="button" onClick={() => setVisible(!visible)} className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#8b837c]" aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+      <button type="button" onClick={() => setVisible(!visible)} className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[var(--muted)]" aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
     </div>
   );
 }
@@ -69,7 +69,7 @@ function PasswordInput({ value, onChange, autoComplete }: { value: string; onCha
 function Feedback({ error, message }: { error: string; message: string }) {
   return (
     <>
-      {error && <p role="alert" className="rounded-xl bg-[#f8e7ea] px-3 py-2 text-sm text-[#8a2c3d]">{error}</p>}
+      {error && <p role="alert" className="rounded-xl bg-[var(--expense-soft)] px-3 py-2 text-sm text-[var(--expense)]">{error}</p>}
       {message && <p className="rounded-xl bg-[#dbe9df] px-3 py-2 text-sm text-[#2f5d3f]">{message}</p>}
     </>
   );
@@ -120,7 +120,7 @@ function LoginForm() {
   return (
     <Screen>
       <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-      <p className="mt-1 text-sm text-[#8b837c] dark:text-[#b5aca5]">{subtitle}</p>
+      <p className="mt-1 text-sm text-[var(--muted)]">{subtitle}</p>
       <form onSubmit={submit} className="mt-5 space-y-3">
         <label className="block"><span className="mb-1 block text-sm font-medium">Email</span><input type="email" inputMode="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} className={inputClass} /></label>
         {mode !== "forgot" && <label className="block"><span className="mb-1 block text-sm font-medium">Contraseña</span><PasswordInput value={password} onChange={setPassword} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>}
@@ -162,7 +162,7 @@ function NewPasswordForm({ onDone }: { onDone: () => void }) {
   return (
     <Screen>
       <h1 className="text-2xl font-bold tracking-tight">Elegí una contraseña nueva</h1>
-      <p className="mt-1 text-sm text-[#8b837c] dark:text-[#b5aca5]">Va a ser la misma en la compu y en el teléfono.</p>
+      <p className="mt-1 text-sm text-[var(--muted)]">Va a ser la misma en la compu y en el teléfono.</p>
       <form onSubmit={submit} className="mt-5 space-y-3">
         <label className="block"><span className="mb-1 block text-sm font-medium">Contraseña nueva</span><PasswordInput value={password} onChange={setPassword} autoComplete="new-password" /></label>
         <label className="block"><span className="mb-1 block text-sm font-medium">Repetila</span><PasswordInput value={repeat} onChange={setRepeat} autoComplete="new-password" /></label>
