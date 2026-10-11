@@ -42,3 +42,55 @@ button:disabled { cursor: not-allowed; }
 input::placeholder { color: #aaa19a; opacity: 1; }
 select option { background: #fffdfa; color: #403b38; }
 :root[data-theme="dark"] select option { background: #2b2826; color: #eee9e3; }
+
+/* Identidad visual: superficies planas, morado uva y acento amarillo */
+:root {
+  --bg: #f4f2f7;
+  --surface: #ffffff;
+  --surface-2: #eeebf3;
+  --border: #e2dde9;
+  --text: #1e1b24;
+  --muted: #6e6779;
+  --primary: #5b3fa0;
+  --primary-strong: #4a3288;
+  --primary-soft: #ebe4f8;
+  --primary-text: #5b3fa0;
+  --hero: #3a2866;
+  --hero-text: #ffffff;
+  --accent: #f5b72e;
+  --accent-text: #2b1e00;
+  --income: #17885b;
+  --expense: #c9344d;
+  --expense-soft: #fbe8eb;
+  --chart-income: #2f6fd6;
+  --chart-expense: #d9701f;
+  --chart-saving: #7b5bd0;
+}
+
+:root[data-theme="dark"] {
+  --bg: #111013;
+  --surface: #1b1a1f;
+  --surface-2: #25232b;
+  --border: #302c37;
+  --text: #f2eff7;
+  --muted: #a39cb0;
+  --primary: #7c5fd6;
+  --primary-strong: #9a80ec;
+  --primary-soft: #2c2443;
+  --primary-text: #c3b4f6;
+  --hero: #2b1f4a;
+  --hero-text: #ffffff;
+  --accent: #f5b72e;
+  --accent-text: #2b1e00;
+  --income: #45c98c;
+  --expense: #ff7086;
+  --expense-soft: #3a1f26;
+  --chart-income: #4c8df0;
+  --chart-expense: #d9742a;
+  --chart-saving: #9174e0;
+}
+
+html, body, :root[data-theme], :root[data-theme] body {
+  background: var(--bg);
+  color: var(--text);
+}
