@@ -1,47 +1,76 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Menu, X, CircleDollarSign, Receipt, PiggyBank, Lightbulb, Sun, Moon, CalendarClock, LogOut } from "lucide-react";
+import { BarChart3, CalendarClock, Home, Lightbulb, ListOrdered, LogOut, Menu, Moon, PiggyBank, Sun, Wallet, X } from "lucide-react";
 import { useAuth } from "./AuthGate";
 import { prefetchAll } from "../lib/cache";
-import { clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
 
-const cn = (...inputs: (string | undefined | false | null)[]) => twMerge(clsx(inputs));
 const items = [
-  { to: "/", label: "Movimientos", icon: Receipt },
-  { to: "/gastos-fijos", label: "Gastos fijos", icon: CalendarClock },
-  { to: "/ahorro", label: "Ahorro", icon: PiggyBank },
-  { to: "/sugerencias", label: "Sugerencias", icon: Lightbulb },
+  { to: "/", label: "Inicio", short: "Inicio", icon: Home },
+  { to: "/movimientos", label: "Movimientos", short: "Movim.", icon: ListOrdered },
+  { to: "/graficos", label: "Gráficos", short: "Gráficos", icon: BarChart3 },
+  { to: "/gastos-fijos", label: "Gastos fijos", short: "Fijos", icon: CalendarClock },
+  { to: "/ahorro", label: "Ahorro", short: "Ahorro", icon: PiggyBank },
+  { to: "/sugerencias", label: "Sugerencias", short: "Ideas", icon: Lightbulb },
 ];
+const bottomItems = items.slice(0, 5);
 
 export default function Layout() {
   const [open, setOpen] = useState(false);
-const { user, signOut } = useAuth();
-useEffect(() => { prefetchAll(user.id); }, [user.id]);
+  const { user, signOut } = useAuth();
   const [dark, setDark] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const stored = localStorage.getItem("finanzas-theme"); return stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    try {
+      const stored = localStorage.getItem("finanzas-theme");
+      return stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    } catch { return false; }
   });
   const location = useLocation();
-  const active = items.find((item) => item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to));
+  const active = items.find((item) => (item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to)));
 
+  useEffect(() => { prefetchAll(user.id); }, [user.id]);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
-    localStorage.setItem("finanzas-theme", dark ? "dark" : "light");
+    try { localStorage.setItem("finanzas-theme", dark ? "dark" : "light"); } catch { /* sin almacenamiento */ }
   }, [dark]);
+  useEffect(() => { setOpen(false); }, [location.pathname]);
+
+  const linkClass = ({ isActive }: { isActive: boolean }) => "flex min-h-11 items-center gap-3 rounded-2xl px-3 text-base transition " + (isActive ? "bg-[var(--primary-soft)] font-semibold text-[var(--primary-text)]" : "text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]");
 
   return (
-    <div className="min-h-screen bg-[#f3f0eb] text-[#3f3b39] transition-colors dark:bg-[#1d1b1a] dark:text-[#eee9e3]">
-      {open && <button aria-label="Cerrar navegación" className="fixed inset-0 z-40 bg-[#3f3b39]/20 lg:hidden" onClick={() => setOpen(false)} />}
-      <aside className={cn("fixed inset-y-0 left-0 z-50 w-72 border-r border-[#ded8d0] bg-[#f8f6f2] p-5 transition-transform dark:border-[#3a3532] dark:bg-[#252220] lg:translate-x-0", open ? "translate-x-0" : "-translate-x-full")}>
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
+      {open && <button aria-label="Cerrar menú" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />}
+      <aside className={"fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-[var(--surface)] p-5 transition-transform lg:translate-x-0 " + (open ? "translate-x-0" : "-translate-x-full")}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#d8cceb] text-[#51465d]"><CircleDollarSign size={21} /></span><div><p className="font-semibold">Finanzas</p><p className="text-sm text-[#8b837c] dark:text-[#b5aca5]">tu mes, más claro</p></div></div>
-          <button className="rounded-xl p-2 text-[#8b837c] lg:hidden" onClick={() => setOpen(false)} aria-label="Cerrar menú"><X size={20} /></button>
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--hero)] text-white"><Wallet size={20} /></span>
+            <div><p className="font-bold">Finanzas</p><p className="text-sm text-[var(--muted)]">tu mes, más claro</p></div>
+          </div>
+          <button className="rounded-xl p-2 text-[var(--muted)] lg:hidden" onClick={() => setOpen(false)} aria-label="Cerrar menú"><X size={20} /></button>
         </div>
-        <nav className="mt-10 space-y-2" aria-label="Secciones"><p className="px-3 text-xs font-semibold uppercase tracking-[.16em] text-[#a39a91]">Tu espacio</p>{items.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} end={to === "/"} onClick={() => setOpen(false)} className={({ isActive }) => cn("flex min-h-11 items-center gap-3 rounded-2xl px-3 text-base transition", isActive ? "bg-[#e4dced] font-semibold text-[#51465d] dark:bg-[#41374a] dark:text-[#eee3f4]" : "text-[#776f68] hover:bg-[#eee9e3] dark:text-[#c7beb7] dark:hover:bg-[#322e2b]")}><Icon size={19} />{label}</NavLink>)}</nav>
-        <div className="absolute bottom-5 left-5 right-5 rounded-2xl bg-[#eee9e3] p-4 text-sm leading-6 text-[#776f68] dark:bg-[#322e2b] dark:text-[#c7beb7]"><p className="truncate" title={user.email ?? ""}>{user.email}</p><button type="button" onClick={signOut} className="mt-2 inline-flex items-center gap-2 font-semibold text-[#6e607c] hover:text-[#51465d] dark:text-[#c9b7d8]"><LogOut size={16} />Cerrar sesión</button></div>
+        <nav className="mt-8 space-y-1" aria-label="Secciones">
+          {items.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} end={to === "/"} className={linkClass}><Icon size={19} />{label}</NavLink>)}
+        </nav>
+        <div className="mt-auto rounded-2xl bg-[var(--surface-2)] p-4 text-sm">
+          <p className="truncate text-[var(--muted)]" title={user.email ?? ""}>{user.email}</p>
+          <button type="button" onClick={signOut} className="mt-2 inline-flex items-center gap-2 font-semibold text-[var(--primary-text)]"><LogOut size={16} />Cerrar sesión</button>
+        </div>
       </aside>
-      <div className="min-h-screen lg:pl-72"><header className="sticky top-0 z-30 flex h-16 items-center border-b border-[#ded8d0]/80 bg-[#f3f0eb]/90 px-4 backdrop-blur dark:border-[#3a3532]/80 dark:bg-[#1d1b1a]/90 lg:px-8"><button className="mr-3 rounded-xl p-2 text-[#655d56] dark:text-[#d2c8c0] lg:hidden" onClick={() => setOpen(true)} aria-label="Abrir navegación"><Menu size={21} /></button><div className="flex min-w-0 flex-1 items-center gap-2"><span className="text-[#8d7ca1]">{active?.icon && (() => { const Icon = active.icon; return <Icon size={18} />; })()}</span><h1 className="truncate text-lg font-semibold">{active?.label}</h1></div><button type="button" onClick={() => setDark((value) => !value)} className="flex h-11 w-11 items-center justify-center rounded-xl text-[#655d56] hover:bg-[#eee9e3] dark:text-[#d2c8c0] dark:hover:bg-[#322e2b]" aria-label={dark ? "Activar tema claro" : "Activar tema oscuro"} title={dark ? "Tema claro" : "Tema oscuro"}>{dark ? <Sun size={19} /> : <Moon size={19} />}</button></header><main className="p-4 sm:p-6 lg:p-10"><Outlet /></main></div>
+
+      <div className="min-h-screen pb-24 lg:pb-0 lg:pl-72">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 bg-[var(--bg)]/90 px-4 backdrop-blur lg:px-8">
+          <button className="rounded-xl p-2 text-[var(--muted)] lg:hidden" onClick={() => setOpen(true)} aria-label="Abrir menú"><Menu size={22} /></button>
+          <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{active?.label ?? "Finanzas"}</h1>
+          <button type="button" onClick={() => setDark((value) => !value)} className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface)]" aria-label={dark ? "Activar tema claro" : "Activar tema oscuro"} title={dark ? "Tema claro" : "Tema oscuro"}>{dark ? <Sun size={20} /> : <Moon size={20} />}</button>
+        </header>
+        <main className="px-4 pb-6 sm:px-6 lg:px-8"><Outlet /></main>
+      </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[var(--border)] bg-[var(--surface)] pb-[env(safe-area-inset-bottom)] lg:hidden" aria-label="Navegación principal">
+        {bottomItems.map(({ to, short, icon: Icon }) => (
+          <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => "flex min-h-16 flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium " + (isActive ? "text-[var(--primary-text)]" : "text-[var(--muted)]")}>
+            {({ isActive }) => <><span className={"flex h-7 w-12 items-center justify-center rounded-full " + (isActive ? "bg-[var(--primary-soft)]" : "")}><Icon size={20} /></span>{short}</>}
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }
