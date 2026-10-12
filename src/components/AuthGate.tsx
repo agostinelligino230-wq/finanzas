@@ -39,6 +39,7 @@ function explain(error: { message?: string; status?: number } | null | undefined
 const cleanEmail = (value: string) => value.trim().toLowerCase();
 const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-base";
 const primaryButton = "inline-flex h-11 w-full items-center justify-center rounded-xl bg-[var(--primary)] text-base font-semibold text-white hover:bg-[var(--primary-strong)] disabled:opacity-60";
+const secondaryButton = "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-base font-semibold text-[var(--text)] hover:bg-[var(--surface-2)] disabled:opacity-60";
 const linkButton = "text-sm font-medium text-[var(--primary)] hover:text-[var(--primary-text)]";
 
 function Screen({ children }: { children: ReactNode }) {
@@ -113,6 +114,16 @@ function LoginForm() {
     setBusy(false);
   };
 
+  // Ingreso con Google: Supabase manda a la pantalla de Google y vuelve logueado.
+  const google = async () => {
+    if (!supabase) return;
+    setError("");
+    setMessage("");
+    setBusy(true);
+    const { error: authError } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
+    if (authError) { setError(explain(authError)); setBusy(false); }
+  };
+
   const title = mode === "login" ? "Ingresá a tu cuenta" : mode === "register" ? "Creá tu cuenta" : "Recuperá tu contraseña";
   const subtitle = mode === "forgot" ? "Te mandamos un link a tu email para crear una contraseña nueva." : "Tus movimientos quedan guardados y separados por mes.";
   const action = mode === "login" ? "Ingresar" : mode === "register" ? "Crear cuenta" : "Enviar link";
@@ -128,6 +139,12 @@ function LoginForm() {
         <Feedback error={error} message={message} />
         <button type="submit" disabled={busy} className={primaryButton}>{busy ? "Un momento…" : action}</button>
       </form>
+      {mode !== "forgot" && (
+        <>
+          <div className="my-4 flex items-center gap-3 text-xs text-[var(--muted)]"><span className="h-px flex-1 bg-[var(--border)]" />o<span className="h-px flex-1 bg-[var(--border)]" /></div>
+          <button type="button" onClick={google} disabled={busy} className={secondaryButton}>Continuar con Google</button>
+        </>
+      )}
       <div className="mt-4 text-center">
         {mode === "login" && <button type="button" onClick={() => switchMode("register")} className={linkButton}>¿No tenés cuenta? Creá una</button>}
         {mode !== "login" && <button type="button" onClick={() => switchMode("login")} className={linkButton}>Volver a ingresar</button>}
