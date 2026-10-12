@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { CircleDollarSign, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { clearCache } from "../lib/cache";
 
@@ -47,8 +47,8 @@ function Screen({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] p-4 text-[var(--text)]">
       <div className="w-full max-w-sm rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-6">
         <div className="mb-6 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><CircleDollarSign size={21} /></span>
-          <div><p className="font-semibold">Finanzas</p><p className="text-sm text-[var(--muted)]">tu mes, más claro</p></div>
+          <img src="/icon.svg" alt="" className="h-11 w-11 shrink-0 rounded-xl" />
+          <div><p className="font-semibold">Finanzas Personales</p><p className="text-sm text-[var(--muted)]">tu mes, más claro</p></div>
         </div>
         {children}
       </div>

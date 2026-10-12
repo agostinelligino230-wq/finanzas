@@ -1,1 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0f172a"/><path d="M142 190c0-27 21-48 48-48h132c27 0 48 21 48 48v132c0 27-21 48-48 48H190c-27 0-48-21-48-48V190Z" fill="#7c3aed"/><circle cx="220" cy="236" r="20" fill="white"/><circle cx="292" cy="236" r="20" fill="white"/><path d="M210 298c28 20 64 20 92 0" fill="none" stroke="white" stroke-width="16" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="bgg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#18A558"/><stop offset="0.55" stop-color="#3D8C8A"/><stop offset="1" stop-color="#7046C9"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#bgg)"/><g transform="translate(56 56) scale(0.78)">
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="60" y1="470" x2="450" y2="60">
+      <stop offset="0" stop-color="#18A558"/>
+      <stop offset="0.55" stop-color="#3D8C8A"/>
+      <stop offset="1" stop-color="#7046C9"/>
+    </linearGradient>
+    <mask id="cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <g transform="rotate(10 300 230)"><rect x="214" y="70" width="168" height="270" rx="22" fill="#000" stroke="#000" stroke-width="22"/></g>
+      <path d="M52 300 C 60 420 160 478 262 478 C 372 478 456 404 462 286" fill="none" stroke="#000" stroke-width="22"/>
+    </mask>
+  </defs>
+  <g fill="#fff" mask="url(#cut)">
+    <g transform="rotate(-34 270 330)"><rect x="196" y="96" width="150" height="250" rx="20"/></g>
+    <g transform="rotate(-14 280 330)"><rect x="204" y="78" width="160" height="262" rx="20"/></g>
+  </g>
+  <g transform="rotate(10 300 230)">
+    <rect x="214" y="70" width="168" height="270" rx="22" fill="#fff"/>
+    <rect x="232" y="88" width="132" height="234" rx="12" fill="url(#g)"/>
+    <path d="M298 112 V 300" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
+    <path d="M340 168 C 330 146 266 140 262 176 C 258 214 338 206 336 254 C 334 290 268 290 256 262" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round"/>
+  </g>
+  <path fill="#fff" d="M60 292 C 66 404 158 456 260 456 C 362 456 438 398 444 296 L 446 214 C 447 192 420 188 414 208 L 392 286 C 384 312 364 326 338 328 L 262 334 C 240 336 238 362 262 364 L 344 364 C 318 400 270 418 216 414 C 150 410 104 370 94 300 C 92 282 62 276 60 292 Z"/>
+</g></svg>
