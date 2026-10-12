@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, CalendarClock, Home, Lightbulb, ListOrdered, LogOut, Menu, Moon, PiggyBank, Sun, Wallet, X } from "lucide-react";
+import { BarChart3, CalendarClock, Home, Lightbulb, ListOrdered, LogOut, Menu, Moon, PiggyBank, Sun, X } from "lucide-react";
 import { useAuth } from "./AuthGate";
 import { prefetchAll } from "../lib/cache";
 
@@ -41,8 +41,8 @@ export default function Layout() {
       <aside className={"fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-[var(--surface)] p-5 transition-transform lg:translate-x-0 " + (open ? "translate-x-0" : "-translate-x-full")}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--hero)] text-white"><Wallet size={20} /></span>
-            <div><p className="font-bold">Finanzas</p><p className="text-sm text-[var(--muted)]">tu mes, más claro</p></div>
+            <img src="/icon.svg" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
+            <div><p className="font-bold">Finanzas Personales</p><p className="text-sm text-[var(--muted)]">tu mes, más claro</p></div>
           </div>
           <button className="rounded-xl p-2 text-[var(--muted)] lg:hidden" onClick={() => setOpen(false)} aria-label="Cerrar menú"><X size={20} /></button>
         </div>
@@ -58,7 +58,7 @@ export default function Layout() {
       <div className="min-h-screen pb-24 lg:pb-0 lg:pl-72">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-2 bg-[var(--bg)]/90 px-4 backdrop-blur lg:px-8">
           <button className="rounded-xl p-2 text-[var(--muted)] lg:hidden" onClick={() => setOpen(true)} aria-label="Abrir menú"><Menu size={22} /></button>
-          <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{active?.label ?? "Finanzas"}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{active?.label ?? "Finanzas Personales"}</h1>
           <button type="button" onClick={() => setDark((value) => !value)} className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface)]" aria-label={dark ? "Activar tema claro" : "Activar tema oscuro"} title={dark ? "Tema claro" : "Tema oscuro"}>{dark ? <Sun size={20} /> : <Moon size={20} />}</button>
         </header>
         <main className="px-4 pb-6 sm:px-6 lg:px-8"><Outlet /></main>
