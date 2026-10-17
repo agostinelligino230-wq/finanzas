@@ -1,30 +1,37 @@
 import { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Check, ChevronDown, CreditCard, Plus, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CalendarClock, Check, ChevronDown, Plus, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "./AuthGate";
 import AddMovementSheet from "./AddMovementSheet";
 import { CategoryIcon, Card, ErrorBox, MonthPicker, StackedBar, Tabs } from "./ui";
 import { findCategory, useCategories } from "../lib/categories";
 import { currentMonthISO, dayLabel, monthLabel, money, timeLabel, usd } from "../lib/format";
-import { cardsMonthTotal, useCards } from "../lib/cards";
+import { cardMonthSummary, useCards, type CreditCard } from "../lib/cards";
+import { useFixed, type FixedRowView } from "../lib/fixed";
+import { PaySheet, ProviderIcon } from "./sheets";
 import { hasDetail, useMovements, type MovementType } from "../lib/movements";
 
 export default function ExpensesPage() {
   const { user } = useAuth();
-  const { movements, error, add, togglePaid, remove } = useMovements(user.id);
+  const { movements, error, add, togglePaid, remove, reload } = useMovements(user.id);
   const { categories, addCategory } = useCategories(user.id);
-  const { cards, items: cardItems, statements } = useCards(user.id);
+  const cardsData = useCards(user.id);
   const [month, setMonth] = useState(currentMonthISO());
   const [tab, setTab] = useState<MovementType>("gasto");
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const fixed = useFixed(user.id, month);
+  const [paying, setPaying] = useState<{ kind: "fijo"; row: FixedRowView } | { kind: "tarjeta"; card: CreditCard; amount: number } | null>(null);
 
   const monthItems = useMemo(() => movements.filter((item) => item.date.startsWith(month)), [movements, month]);
   const income = monthItems.filter((item) => item.type === "ingreso").reduce((sum, item) => sum + item.amount, 0);
   const expense = monthItems.filter((item) => item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
-  const cardsTotal = cardsMonthTotal(cards, cardItems, statements, month);
-  const available = income - expense - cardsTotal;
-  const tileText = cards.length > 0 ? "text-sm sm:text-lg" : "text-lg";
+  const available = income - expense;
+  // Lo que falta pagar del mes: gastos fijos y tarjetas sin marcar como pagados.
+  const pendingFixed = fixed.rows.filter((row) => !row.paid && row.amount > 0);
+  const pendingCards = cardsData.cards.map((card) => ({ card, summary: cardMonthSummary(cardsData.items, cardsData.statements, card.id, month, cardsData.payments) })).filter((entry) => !entry.summary.payment && entry.summary.total > 0);
+  const pendingTotal = pendingFixed.reduce((sum, row) => sum + row.amount, 0) + pendingCards.reduce((sum, entry) => sum + entry.summary.total, 0);
+  const hasObligations = fixed.rows.length > 0 || cardsData.cards.length > 0;
   const dollarIncome = monthItems.filter((item) => item.type === "ingreso" && item.currency === "USD");
   const dollarTotal = dollarIncome.reduce((sum, item) => sum + (item.original ?? 0), 0);
   const dollarPesos = dollarIncome.reduce((sum, item) => sum + item.amount, 0);
@@ -52,26 +59,53 @@ export default function ExpensesPage() {
         <p className="text-sm opacity-80">Disponible en {monthLabel(month)}</p>
         <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums sm:text-5xl" style={{ color: available < 0 ? "#ffb3c0" : undefined }}>{money(available)}</p>
         {dollarTotal > 0 && <p className="mt-1 text-sm opacity-80">Tus ingresos incluyen <strong>{usd(dollarTotal)}</strong> ≈ {money(dollarPesos)}</p>}
-        <div className={"mt-5 grid " + (cards.length > 0 ? "grid-cols-3 gap-2 sm:gap-3" : "grid-cols-2 gap-3")}>
+        <div className="mt-5 grid grid-cols-2 gap-3">
           <div className="rounded-2xl bg-white/10 p-3">
             <p className="flex items-center gap-1.5 text-xs opacity-80"><ArrowDownLeft size={14} />Ingresos</p>
-            <p className={"mt-1 font-bold tabular-nums " + tileText}>{money(income)}</p>
+            <p className="mt-1 text-lg font-bold tabular-nums">{money(income)}</p>
           </div>
           <div className="rounded-2xl bg-white/10 p-3">
             <p className="flex items-center gap-1.5 text-xs opacity-80"><ArrowUpRight size={14} />Gastos</p>
-            <p className={"mt-1 font-bold tabular-nums " + tileText}>{money(expense)}</p>
+            <p className="mt-1 text-lg font-bold tabular-nums">{money(expense)}</p>
           </div>
-          {cards.length > 0 && (
-            <Link to="/tarjetas" className="rounded-2xl bg-white/10 p-3">
-              <p className="flex items-center gap-1.5 text-xs opacity-80"><CreditCard size={14} />Tarjetas</p>
-              <p className={"mt-1 font-bold tabular-nums " + tileText}>{money(cardsTotal)}</p>
-            </Link>
-          )}
         </div>
         <p className="mt-4 text-xs opacity-75">Saldo acumulado de todos los meses: <strong className="tabular-nums">{money(accumulated)}</strong>{pending > 0 && <> · Falta pagar este mes: <strong className="tabular-nums">{money(pending)}</strong></>}</p>
       </section>
 
       <ErrorBox message={error} />
+
+      {hasObligations && (
+        <Card>
+          <div className="flex items-center justify-between gap-3">
+            <p className="flex items-center gap-2 font-semibold"><CalendarClock size={18} className="text-[var(--primary-text)]" />{pendingTotal > 0 ? "Te falta pagar en " + monthLabel(month).toLowerCase() : "Fijos y tarjetas al día"}</p>
+            {pendingTotal > 0 && <span className="text-lg font-bold tabular-nums">{money(pendingTotal)}</span>}
+          </div>
+          {pendingTotal > 0 ? (
+            <>
+              <div className="mt-2 divide-y divide-[var(--border)]">
+                {pendingFixed.map((row) => (
+                  <div key={row.item.id} className="flex items-center gap-3 py-2">
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{row.item.name}</span><span className="block text-xs text-[var(--muted)]">Gasto fijo · vence el {row.item.dueDay}</span></span>
+                    <span className="text-sm font-semibold tabular-nums">{money(row.amount)}</span>
+                    <button type="button" onClick={() => setPaying({ kind: "fijo", row })} className="h-8 rounded-full bg-[var(--primary-soft)] px-3 text-xs font-semibold text-[var(--primary-text)]">Pagar</button>
+                  </div>
+                ))}
+                {pendingCards.map(({ card, summary }) => (
+                  <div key={card.id} className="flex items-center gap-3 py-2">
+                    <ProviderIcon name={card.name} color={card.color} size={28} />
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">Tarjeta {card.name}</span><span className="block text-xs text-[var(--muted)]">{summary.statement ? "Resumen del mail" : "Cuotas y débitos"}{card.dueDay ? " · vence el " + card.dueDay : ""}</span></span>
+                    <span className="text-sm font-semibold tabular-nums">{money(summary.total)}</span>
+                    <button type="button" onClick={() => setPaying({ kind: "tarjeta", card, amount: summary.total })} className="h-8 rounded-full bg-[var(--primary-soft)] px-3 text-xs font-semibold text-[var(--primary-text)]">Pagar</button>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 rounded-2xl bg-[var(--surface-2)] px-3 py-2 text-sm">Si pagás todo, te quedan <strong className="tabular-nums" style={{ color: available - pendingTotal < 0 ? "var(--expense)" : undefined }}>{money(available - pendingTotal)}</strong></p>
+            </>
+          ) : <p className="mt-1 text-sm text-[var(--muted)]">Ya pagaste todos los gastos fijos y las tarjetas de este mes.</p>}
+          <Link to="/gastos-fijos" className="mt-2 inline-block text-sm font-semibold text-[var(--primary-text)]">Ver fijos y tarjetas →</Link>
+        </Card>
+      )}
+
       <MonthPicker month={month} onChange={(value) => { setMonth(value); setOpen(null); }} />
       <Tabs value={tab} onChange={(value) => { setTab(value); setOpen(null); }} options={[{ value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
 
@@ -134,6 +168,8 @@ export default function ExpensesPage() {
       )}
 
       <button type="button" onClick={() => setAdding(true)} className="fixed bottom-24 right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-text)] shadow-xl transition hover:scale-105 lg:bottom-8 lg:right-8" aria-label="Agregar movimiento"><Plus size={30} strokeWidth={2.5} /></button>
+      {paying?.kind === "fijo" && <PaySheet title={paying.row.item.name} month={month} suggested={paying.row.amount} onConfirm={async (amount, addToExpenses) => { const ok = await fixed.pay(paying.row, amount, addToExpenses); if (ok) reload(); return ok; }} onClose={() => setPaying(null)} />}
+      {paying?.kind === "tarjeta" && <PaySheet title={"tarjeta " + paying.card.name} detail={"Resumen de " + monthLabel(month).toLowerCase()} month={month} suggested={paying.amount} onConfirm={async (amount, addToExpenses) => { const ok = await cardsData.payCard(paying.card, month, amount, addToExpenses); if (ok) reload(); return ok; }} onClose={() => setPaying(null)} />}
       <AddMovementSheet open={adding} initialKind={tab} categories={categories} onAddCategory={addCategory} onSave={add} onClose={() => setAdding(false)} />
     </div>
   );

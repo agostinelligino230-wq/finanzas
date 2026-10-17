@@ -1,49 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
-import { Check, CreditCard, Home, MoreHorizontal, Plus, Trash2, TrendingDown, TrendingUp, Wifi, Zap } from "lucide-react";
-import { supabase } from "../lib/supabase";
-import { readCache, writeCache } from "../lib/cache";
-import { currentMonthISO, money, monthLabel, parseAmount, shiftMonth } from "../lib/format";
+import { useEffect, useState } from "react";
+import { CalendarClock, Check, CreditCard as CardIcon, Home, MoreHorizontal, Plus, Trash2, TrendingDown, TrendingUp, Wifi, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
+import { currentMonthISO, money, monthLabel, parseAmount } from "../lib/format";
+import { FIXED_KINDS, FIXED_LABELS, useFixed, type Fixed, type FixedInput, type FixedKind, type FixedRowView } from "../lib/fixed";
+import { cardMonthSummary, installmentNumber, itemsForMonth, lastMonth, useCards, type CreditCard } from "../lib/cards";
 import { useAuth } from "./AuthGate";
 import { Card, ErrorBox, MonthPicker, Sheet, sheetField as field, sheetLabel as label } from "./ui";
+import { CardItemSheet, NewCardSheet, PaySheet, ProviderIcon, type ItemDraft } from "./sheets";
 
-type Kind = "impuesto" | "suscripcion" | "alquiler" | "servicio" | "otro";
-type Fixed = { id: string; name: string; amount: number; category: Kind; dueDay: number; startMonth: string | null; endMonth: string | null };
-type AmountChange = { id: string; fixedId: string; month: string; amount: number };
-type Payment = { fixedId: string; amount: number | null };
+const ICONS = { impuesto: Zap, suscripcion: CardIcon, alquiler: Home, servicio: Wifi, otro: MoreHorizontal };
 
-type FixedRow = { id: string; name: string; amount: number | string; category: string; due_day: number; start_month?: string | null; end_month?: string | null };
-type AmountRow = { id: string; fixed_expense_id: string; month: string; amount: number | string };
-type PaymentRow = { fixed_expense_id: string; amount?: number | string | null };
-
-const KINDS: Kind[] = ["impuesto", "suscripcion", "alquiler", "servicio", "otro"];
-const LABELS: Record<Kind, string> = { impuesto: "Impuesto", suscripcion: "Suscripción", alquiler: "Alquiler", servicio: "Servicio", otro: "Otro" };
-const ICONS = { impuesto: Zap, suscripcion: CreditCard, alquiler: Home, servicio: Wifi, otro: MoreHorizontal };
-
-const fixedFromRow = (row: FixedRow): Fixed => ({ id: row.id, name: row.name, amount: Number(row.amount), category: (KINDS.includes(row.category as Kind) ? row.category : "otro") as Kind, dueDay: row.due_day, startMonth: row.start_month ?? null, endMonth: row.end_month ?? null });
-const amountFromRow = (row: AmountRow): AmountChange => ({ id: row.id, fixedId: row.fixed_expense_id, month: row.month, amount: Number(row.amount) });
-const paymentFromRow = (row: PaymentRow): Payment => ({ fixedId: row.fixed_expense_id, amount: row.amount === null || row.amount === undefined ? null : Number(row.amount) });
-
-const activeIn = (item: Fixed, month: string) => (!item.startMonth || item.startMonth <= month) && (!item.endMonth || month <= item.endMonth);
-
-// Monto programado para un mes: el último cambio de precio desde ese mes hacia atrás, o el monto original.
-function scheduled(item: Fixed, changes: AmountChange[], month: string) {
-  const latest = changes.filter((change) => change.fixedId === item.id && change.month <= month).sort((a, b) => b.month.localeCompare(a.month))[0];
-  return latest ? latest.amount : item.amount;
-}
-
-type Draft = { item?: Fixed };
-
-function FixedSheet({ draft, month, amountNow, onClose, onCreate, onUpdate, onStop, onDelete }: {
-  draft: Draft; month: string; amountNow: number | null; onClose: () => void;
-  onCreate: (input: { name: string; amount: number; category: Kind; dueDay: number }) => Promise<boolean>;
-  onUpdate: (item: Fixed, input: { name: string; amount: number; category: Kind; dueDay: number; scope: "desde" | "solo" }) => Promise<boolean>;
+function FixedSheet({ item, month, amountNow, onClose, onCreate, onUpdate, onStop, onDelete }: {
+  item?: Fixed; month: string; amountNow: number | null; onClose: () => void;
+  onCreate: (input: FixedInput) => Promise<boolean>;
+  onUpdate: (item: Fixed, input: FixedInput & { scope: "desde" | "solo" }) => Promise<boolean>;
   onStop: (item: Fixed) => Promise<boolean>;
   onDelete: (item: Fixed) => Promise<boolean>;
 }) {
-  const item = draft.item;
   const [name, setName] = useState(item?.name ?? "");
   const [amount, setAmount] = useState(amountNow !== null ? String(amountNow).replace(".", ",") : "");
-  const [category, setCategory] = useState<Kind>(item?.category ?? "servicio");
+  const [category, setCategory] = useState<FixedKind>(item?.category ?? "servicio");
   const [dueDay, setDueDay] = useState(String(item?.dueDay ?? 1));
   const [scope, setScope] = useState<"desde" | "solo">("desde");
   const [busy, setBusy] = useState(false);
@@ -76,7 +52,7 @@ function FixedSheet({ draft, month, amountNow, onClose, onCreate, onUpdate, onSt
         </div>
       )}
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <label className="block"><span className={label}>Tipo</span><select value={category} onChange={(event) => setCategory(event.target.value as Kind)} className={field}>{KINDS.map((kind) => <option key={kind} value={kind}>{LABELS[kind]}</option>)}</select></label>
+        <label className="block"><span className={label}>Tipo</span><select value={category} onChange={(event) => setCategory(event.target.value as FixedKind)} className={field}>{FIXED_KINDS.map((kind) => <option key={kind} value={kind}>{FIXED_LABELS[kind]}</option>)}</select></label>
         <label className="block"><span className={label}>Vence el día</span><input value={dueDay} onChange={(event) => setDueDay(event.target.value.replace(/\D/g, "").slice(0, 2))} inputMode="numeric" className={field + " tabular-nums"} /></label>
       </div>
       {!item && <p className="mt-3 text-xs text-[var(--muted)]">Empieza a contar desde {monthName}.</p>}
@@ -92,188 +68,130 @@ function FixedSheet({ draft, month, amountNow, onClose, onCreate, onUpdate, onSt
   );
 }
 
+function PaidCheck({ paid, label: text, onClick }: { paid: boolean; label: string; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 " + (paid ? "border-[var(--income)] bg-[var(--income)] text-white" : "border-[var(--border)] text-transparent")} aria-label={text}><Check size={18} /></button>;
+}
+
+type Paying = { kind: "fijo"; row: FixedRowView } | { kind: "tarjeta"; card: CreditCard; amount: number };
+
 export default function FixedExpensesPage() {
   const { user } = useAuth();
   const [month, setMonth] = useState(currentMonthISO());
-  const [items, setItems] = useState<Fixed[]>(() => readCache<Fixed[]>("fixed_v2", user.id) ?? (readCache<FixedRow[]>("raw:fixed_expenses", user.id) ?? []).map(fixedFromRow));
-  const [changes, setChanges] = useState<AmountChange[]>(() => readCache<AmountChange[]>("fixed_amounts", user.id) ?? []);
-  const [payments, setPayments] = useState<Payment[]>(() => readCache<Payment[]>("payments2:" + currentMonthISO(), user.id) ?? []);
-  const [error, setError] = useState("");
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const fixed = useFixed(user.id, month);
+  const cardsData = useCards(user.id);
+  const { cards, items, statements, payments } = cardsData;
+  const [editing, setEditing] = useState<{ item?: Fixed } | null>(null);
+  const [cardDraft, setCardDraft] = useState<ItemDraft | null>(null);
+  const [newCard, setNewCard] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [paying, setPaying] = useState<Paying | null>(null);
 
-  useEffect(() => { writeCache("fixed_v2", user.id, items); }, [items, user.id]);
-  useEffect(() => { writeCache("fixed_amounts", user.id, changes); }, [changes, user.id]);
+  useEffect(() => { setEditing(null); setCardDraft(null); setPaying(null); }, [month]);
 
-  useEffect(() => {
-    if (!supabase) return;
-    let active = true;
-    Promise.all([
-      supabase.from("fixed_expenses").select("*").order("created_at", { ascending: true }),
-      supabase.from("fixed_expense_amounts").select("*"),
-    ]).then(([fixed, amounts]) => {
-      if (!active) return;
-      if (fixed.error) { setError("No se pudieron cargar los gastos fijos."); return; }
-      setItems(((fixed.data ?? []) as FixedRow[]).map(fixedFromRow));
-      if (!amounts.error) setChanges(((amounts.data ?? []) as AmountRow[]).map(amountFromRow));
-    });
-    return () => { active = false; };
-  }, [user.id]);
-
-  useEffect(() => {
-    setPayments(readCache<Payment[]>("payments2:" + month, user.id) ?? []);
-    if (!supabase) return;
-    let active = true;
-    supabase.from("fixed_expense_payments").select("*").eq("month", month).then(({ data, error: loadError }) => {
-      if (!active) return;
-      if (loadError) { setError("No se pudieron cargar los pagos del mes."); return; }
-      const list = ((data ?? []) as PaymentRow[]).map(paymentFromRow);
-      writeCache("payments2:" + month, user.id, list);
-      setPayments(list);
-    });
-    return () => { active = false; };
-  }, [user.id, month]);
-
-  const setMonthPayments = (update: (current: Payment[]) => Payment[]) => setPayments((current) => { const next = update(current); writeCache("payments2:" + month, user.id, next); return next; });
-
-  const rows = useMemo(() => items.filter((item) => activeIn(item, month)).map((item) => {
-    const payment = payments.find((entry) => entry.fixedId === item.id);
-    const amount = payment?.amount ?? scheduled(item, changes, month);
-    const previousMonth = shiftMonth(month, -1);
-    const previous = activeIn(item, previousMonth) ? scheduled(item, changes, previousMonth) : null;
-    return { item, amount, paid: Boolean(payment), previous: previous !== null && previous !== amount ? previous : null };
-  }).sort((a, b) => a.item.dueDay - b.item.dueDay), [items, payments, changes, month]);
-
-  const total = rows.reduce((sum, row) => sum + row.amount, 0);
-  const paidTotal = rows.filter((row) => row.paid).reduce((sum, row) => sum + row.amount, 0);
-
-  const fail = (message: string) => { setError(message); return false; };
-
-  const togglePaid = async (row: (typeof rows)[number]) => {
-    if (!supabase) return;
-    if (row.paid) {
-      const { error: saveError } = await supabase.from("fixed_expense_payments").delete().eq("fixed_expense_id", row.item.id).eq("month", month);
-      if (saveError) { fail("No se pudo actualizar el pago."); return; }
-      setMonthPayments((current) => current.filter((entry) => entry.fixedId !== row.item.id));
-    } else {
-      // Al marcarlo pagado se guarda el monto de ese mes: aunque después cambie el precio, este registro no se toca.
-      const { error: saveError } = await supabase.from("fixed_expense_payments").insert({ user_id: user.id, fixed_expense_id: row.item.id, month, amount: row.amount });
-      if (saveError) { fail("No se pudo actualizar el pago."); return; }
-      setMonthPayments((current) => [...current, { fixedId: row.item.id, amount: row.amount }]);
-    }
-    setError("");
-  };
-
-  const create = async (input: { name: string; amount: number; category: Kind; dueDay: number }) => {
-    if (!supabase) return false;
-    const { data, error: saveError } = await supabase.from("fixed_expenses").insert({ user_id: user.id, name: input.name, amount: input.amount, category: input.category, due_day: input.dueDay, start_month: month }).select().single();
-    if (saveError || !data) return fail("No se pudo guardar el gasto fijo.");
-    setError("");
-    setItems((current) => [...current, fixedFromRow(data as FixedRow)]);
-    return true;
-  };
-
-  const update = async (item: Fixed, input: { name: string; amount: number; category: Kind; dueDay: number; scope: "desde" | "solo" }) => {
-    if (!supabase) return false;
-    const { error: saveError } = await supabase.from("fixed_expenses").update({ name: input.name, category: input.category, due_day: input.dueDay }).eq("id", item.id);
-    if (saveError) return fail("No se pudo guardar el gasto fijo.");
-    setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, name: input.name, category: input.category, dueDay: input.dueDay } : entry)));
-
-    const payment = payments.find((entry) => entry.fixedId === item.id);
-    const current = payment?.amount ?? scheduled(item, changes, month);
-    if (input.amount !== current) {
-      const nextMonth = shiftMonth(month, 1);
-      const nextBefore = scheduled(item, changes, nextMonth);
-      const upserts = [{ user_id: user.id, fixed_expense_id: item.id, month, amount: input.amount }];
-      if (input.scope === "solo" && !changes.some((change) => change.fixedId === item.id && change.month === nextMonth)) upserts.push({ user_id: user.id, fixed_expense_id: item.id, month: nextMonth, amount: nextBefore });
-      const { data, error: amountError } = await supabase.from("fixed_expense_amounts").upsert(upserts, { onConflict: "fixed_expense_id,month" }).select();
-      if (amountError) return fail("No se pudo guardar el nuevo monto.");
-      if (input.scope === "desde") {
-        const { error: deleteError } = await supabase.from("fixed_expense_amounts").delete().eq("fixed_expense_id", item.id).gt("month", month);
-        if (deleteError) return fail("No se pudo guardar el nuevo monto.");
-      }
-      const saved = ((data ?? []) as AmountRow[]).map(amountFromRow);
-      setChanges((list) => [
-        ...list.filter((change) => change.fixedId !== item.id || (!saved.some((entry) => entry.month === change.month) && !(input.scope === "desde" && change.month > month))),
-        ...saved,
-      ]);
-      if (payment) {
-        const { error: paymentError } = await supabase.from("fixed_expense_payments").update({ amount: input.amount }).eq("fixed_expense_id", item.id).eq("month", month);
-        if (paymentError) return fail("No se pudo actualizar el pago de este mes.");
-        setMonthPayments((list) => list.map((entry) => (entry.fixedId === item.id ? { ...entry, amount: input.amount } : entry)));
-      }
-    }
-    setError("");
-    return true;
-  };
-
-  const stop = async (item: Fixed) => {
-    if (!supabase) return false;
-    const endMonth = shiftMonth(month, -1);
-    const { error: saveError } = await supabase.from("fixed_expenses").update({ end_month: endMonth }).eq("id", item.id);
-    if (saveError) return fail("No se pudo actualizar el gasto fijo.");
-    setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, endMonth } : entry)));
-    return true;
-  };
-
-  const remove = async (item: Fixed) => {
-    if (!supabase) return false;
-    const { error: saveError } = await supabase.from("fixed_expenses").delete().eq("id", item.id);
-    if (saveError) return fail("No se pudo eliminar el gasto fijo.");
-    setItems((current) => current.filter((entry) => entry.id !== item.id));
-    return true;
-  };
-
-  const editing = draft?.item ? rows.find((row) => row.item.id === draft.item!.id) : null;
+  const cardRows = cards.map((card) => ({ card, summary: cardMonthSummary(items, statements, card.id, month, payments), list: itemsForMonth(items, card.id, month).sort((a, b) => b.amount - a.amount) })).filter((entry) => entry.summary.total > 0 || entry.list.length > 0);
+  const fixedTotal = fixed.rows.reduce((sum, row) => sum + row.amount, 0);
+  const cardsTotal = cardRows.reduce((sum, entry) => sum + entry.summary.total, 0);
+  const paidTotal = fixed.rows.filter((row) => row.paid).reduce((sum, row) => sum + row.amount, 0) + cardRows.filter((entry) => entry.summary.payment).reduce((sum, entry) => sum + entry.summary.total, 0);
+  const total = fixedTotal + cardsTotal;
+  const editingRow = editing?.item ? fixed.rows.find((row) => row.item.id === editing.item!.id) : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <ErrorBox message={error} />
-      <MonthPicker month={month} onChange={(value) => { setMonth(value); setDraft(null); }} />
+      <ErrorBox message={fixed.error || cardsData.error} />
+      <MonthPicker month={month} onChange={setMonth} />
 
       <section className="rounded-[28px] bg-[var(--hero)] p-5 text-[var(--hero-text)]">
-        <p className="text-sm opacity-80">Gastos fijos de {monthLabel(month).toLowerCase()}</p>
+        <p className="text-sm opacity-80">Fijos y tarjetas de {monthLabel(month).toLowerCase()}</p>
         <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums">{money(total)}</p>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs opacity-80">Ya pagado</p><p className="mt-1 text-lg font-bold tabular-nums">{money(paidTotal)}</p></div>
           <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs opacity-80">Falta pagar</p><p className="mt-1 text-lg font-bold tabular-nums">{money(total - paidTotal)}</p></div>
         </div>
+        <p className="mt-3 text-xs opacity-75">Al marcar algo como pagado se suma a tus gastos del mes en Inicio.</p>
       </section>
 
-      {rows.length === 0 ? (
-        <Card className="py-10 text-center">
-          <p className="text-base font-semibold">No hay gastos fijos en {monthLabel(month).toLowerCase()}</p>
-          <p className="mt-1 text-sm text-[var(--muted)]">Agregá alquiler, luz, gimnasio o suscripciones.</p>
-        </Card>
-      ) : (
-        <div className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--surface)]">
-          {rows.map((row) => {
-            const Icon = ICONS[row.item.category];
-            return (
-              <div key={row.item.id} className="flex items-center gap-3 p-3 sm:p-4">
-                <button type="button" onClick={() => togglePaid(row)} className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 " + (row.paid ? "border-[var(--income)] bg-[var(--income)] text-white" : "border-[var(--border)] text-transparent")} aria-label={row.paid ? "Marcar " + row.item.name + " como pendiente" : "Marcar " + row.item.name + " como pagado"}><Check size={18} /></button>
-                <button type="button" onClick={() => setDraft({ item: row.item })} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><Icon size={19} /></span>
-                  <span className="min-w-0 flex-1">
-                    <span className={"block truncate font-semibold " + (row.paid ? "text-[var(--muted)]" : "")}>{row.item.name}</span>
-                    <span className="block text-xs text-[var(--muted)]">{LABELS[row.item.category]} · vence el {row.item.dueDay}{row.paid && " · pagado"}</span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block font-semibold tabular-nums">{money(row.amount)}</span>
-                    {row.previous !== null && (
-                      <span className="flex items-center justify-end gap-1 text-xs text-[var(--muted)]">{row.amount > row.previous ? <TrendingUp size={12} /> : <TrendingDown size={12} />}antes {money(row.previous)}</span>
-                    )}
-                  </span>
-                </button>
+      <section className="space-y-2">
+        <h2 className="flex items-center justify-between px-2 text-sm font-semibold text-[var(--muted)]"><span className="flex items-center gap-2"><CalendarClock size={16} />Gastos fijos</span><span className="tabular-nums">{money(fixedTotal)}</span></h2>
+        {fixed.rows.length === 0 ? (
+          <Card className="py-6 text-center text-sm text-[var(--muted)]">No hay gastos fijos en {monthLabel(month).toLowerCase()}. Agregá alquiler, luz o gimnasio con el botón +.</Card>
+        ) : (
+          <div className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--surface)]">
+            {fixed.rows.map((row) => {
+              const Icon = ICONS[row.item.category];
+              return (
+                <div key={row.item.id} className="flex items-center gap-3 p-3 sm:p-4">
+                  <PaidCheck paid={row.paid} label={row.paid ? "Marcar " + row.item.name + " como pendiente" : "Pagar " + row.item.name} onClick={() => { if (row.paid) { if (window.confirm("¿Desmarcar " + row.item.name + "? Si lo sumaste a tus gastos, también se quita.")) fixed.unpay(row); } else setPaying({ kind: "fijo", row }); }} />
+                  <button type="button" onClick={() => setEditing({ item: row.item })} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><Icon size={19} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className={"block truncate font-semibold " + (row.paid ? "text-[var(--muted)]" : "")}>{row.item.name}</span>
+                      <span className="block text-xs text-[var(--muted)]">{FIXED_LABELS[row.item.category]} · vence el {row.item.dueDay}{row.paid && " · pagado"}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block font-semibold tabular-nums">{money(row.amount)}</span>
+                      {row.previous !== null && <span className="flex items-center justify-end gap-1 text-xs text-[var(--muted)]">{row.amount > row.previous ? <TrendingUp size={12} /> : <TrendingDown size={12} />}antes {money(row.previous)}</span>}
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="flex items-center justify-between px-2 text-sm font-semibold text-[var(--muted)]"><span className="flex items-center gap-2"><CardIcon size={16} />De tarjeta</span><span className="tabular-nums">{money(cardsTotal)}</span></h2>
+        {cardRows.length === 0 ? (
+          <Card className="py-6 text-center text-sm text-[var(--muted)]">No hay cuotas ni débitos de tarjeta en {monthLabel(month).toLowerCase()}.</Card>
+        ) : cardRows.map(({ card, summary, list }) => (
+          <div key={card.id} className="overflow-hidden rounded-3xl bg-[var(--surface)]">
+            <div className="flex items-center gap-3 p-3 sm:p-4">
+              <PaidCheck paid={Boolean(summary.payment)} label={summary.payment ? "Desmarcar el pago de " + card.name : "Pagar " + card.name} onClick={() => { if (summary.payment) { if (window.confirm("¿Desmarcar el pago de " + card.name + "? También se quita de tus gastos del mes.")) cardsData.unpayCard(card, month); } else setPaying({ kind: "tarjeta", card, amount: summary.total }); }} />
+              <ProviderIcon name={card.name} color={card.color} />
+              <div className="min-w-0 flex-1">
+                <p className={"truncate font-semibold " + (summary.payment ? "text-[var(--muted)]" : "")}>Tarjeta {card.name}</p>
+                <p className="text-xs text-[var(--muted)]">{summary.payment ? "Pagada" : summary.statement ? "Según el resumen del mail" : list.length + (list.length === 1 ? " cuota o débito" : " cuotas y débitos")}{card.dueDay ? " · vence el " + card.dueDay : ""}</p>
               </div>
-            );
-          })}
-        </div>
+              <span className="shrink-0 font-bold tabular-nums">{money(summary.total)}</span>
+            </div>
+            {list.length > 0 && (
+              <div className="divide-y divide-[var(--border)] border-t border-[var(--border)] pl-[60px] pr-3 sm:pr-4">
+                {list.map((item) => {
+                  const n = installmentNumber(item, month) ?? 1;
+                  const last = lastMonth(item);
+                  return (
+                    <button key={item.id} type="button" onClick={() => setCardDraft({ card, item })} className="flex w-full items-center gap-3 py-2.5 text-left">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{item.description}</span>
+                        <span className="block text-xs text-[var(--muted)]">{item.kind === "cuotas" ? "Cuota " + n + " de " + item.installments + (n === item.installments ? " · última" : last ? " · termina en " + monthLabel(last).toLowerCase() : "") : "Débito fijo"}</span>
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">{money(item.amount)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+        <Link to="/tarjetas" className="block px-2 text-sm font-semibold text-[var(--primary-text)]">Ver tarjetas y resúmenes →</Link>
+      </section>
+
+      <button type="button" onClick={() => setChoosing(true)} className="fixed bottom-24 right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-text)] shadow-xl transition hover:scale-105 lg:bottom-8 lg:right-8" aria-label="Agregar"><Plus size={30} strokeWidth={2.5} /></button>
+
+      {choosing && (
+        <Sheet title="¿Qué querés agregar?" onClose={() => setChoosing(false)}>
+          <div className="space-y-2">
+            <button type="button" onClick={() => { setChoosing(false); setEditing({}); }} className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)]"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><CalendarClock size={20} /></span><span><span className="block font-semibold">Gasto fijo</span><span className="text-sm text-[var(--muted)]">Alquiler, luz, gimnasio, internet…</span></span></button>
+            <button type="button" onClick={() => { setChoosing(false); if (cards.length === 0) setNewCard(true); else setCardDraft({}); }} className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)]"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><CardIcon size={20} /></span><span><span className="block font-semibold">Cuota o débito de tarjeta</span><span className="text-sm text-[var(--muted)]">Ventilador en 12 cuotas, Spotify en la tarjeta…</span></span></button>
+          </div>
+        </Sheet>
       )}
 
-      <p className="px-2 text-xs text-[var(--muted)]">Tocá un gasto para cambiar el monto. Los meses que ya marcaste como pagados guardan lo que pagaste.</p>
-
-      <button type="button" onClick={() => setDraft({})} className="fixed bottom-24 right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-text)] shadow-xl transition hover:scale-105 lg:bottom-8 lg:right-8" aria-label="Agregar gasto fijo"><Plus size={30} strokeWidth={2.5} /></button>
-      {draft && <FixedSheet key={(draft.item?.id ?? "new") + month} draft={draft} month={month} amountNow={editing ? editing.amount : null} onClose={() => setDraft(null)} onCreate={create} onUpdate={update} onStop={stop} onDelete={remove} />}
+      {editing && <FixedSheet key={(editing.item?.id ?? "new") + month} item={editing.item} month={month} amountNow={editingRow ? editingRow.amount : null} onClose={() => setEditing(null)} onCreate={fixed.create} onUpdate={fixed.update} onStop={fixed.stop} onDelete={fixed.remove} />}
+      {cardDraft && <CardItemSheet key={(cardDraft.item?.id ?? "new") + month} draft={cardDraft} cards={cards} month={month} onSave={cardsData.saveItem} onRemove={cardsData.removeItem} onNewCard={() => { setCardDraft(null); setNewCard(true); }} onClose={() => setCardDraft(null)} />}
+      {newCard && <NewCardSheet onSave={async (input) => { const created = await cardsData.addCard(input); if (created) setTimeout(() => setCardDraft({ card: created }), 0); return created; }} onClose={() => setNewCard(false)} />}
+      {paying?.kind === "fijo" && <PaySheet title={paying.row.item.name} month={month} suggested={paying.row.amount} onConfirm={(amount, add) => fixed.pay(paying.row, amount, add)} onClose={() => setPaying(null)} />}
+      {paying?.kind === "tarjeta" && <PaySheet title={"tarjeta " + paying.card.name} detail={"Resumen de " + monthLabel(month).toLowerCase()} month={month} suggested={paying.amount} onConfirm={(amount, add) => cardsData.payCard(paying.card, month, amount, add)} onClose={() => setPaying(null)} />}
     </div>
   );
 }
