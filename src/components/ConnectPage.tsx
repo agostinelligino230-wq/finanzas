@@ -1,162 +1,108 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Copy, ExternalLink, Mail, Plus, Search, ShieldCheck } from "lucide-react";
+import { Check, Mail, Plus, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { buildAccountsScript } from "../lib/ualaScript";
 import { AUTO_PROVIDERS, KIND_LABELS, PROVIDERS, type Provider } from "../lib/providers";
 import { useCards } from "../lib/cards";
+import { useGmail } from "../lib/gmail";
 import { useAuth } from "./AuthGate";
-import { Card, ErrorBox, Sheet, sheetField as field, sheetLabel as label } from "./ui";
+import { Card, ErrorBox, sheetLabel as label } from "./ui";
 import { NewCardSheet, ProviderIcon } from "./sheets";
+import StatementSources from "./StatementSources";
 
-type TokenRow = { token: string; last_import_at: string | null; last_result: { movimientos?: number; resumenes?: number } | null };
-
-const newToken = () => {
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const RETURN_MESSAGES: Record<string, { text: string; ok: boolean }> = {
+  ok: { text: "¡Listo! Tu Gmail quedó conectado y ya trajimos tus últimos movimientos. Abajo te preguntamos si analizamos los resúmenes de tus tarjetas.", ok: true },
+  cancelado: { text: "No se conectó: cancelaste en la pantalla de Google.", ok: false },
+  "sin-permiso": { text: "Falta un permiso: en la pantalla de Google tildá “Ver tus mensajes de correo electrónico” y probá de nuevo.", ok: false },
+  error: { text: "Algo falló al conectar. Probá de nuevo.", ok: false },
 };
-
-const readSaved = <T,>(key: string, fallback: T): T => { try { const value = localStorage.getItem(key); return value ? (JSON.parse(value) as T) : fallback; } catch { return fallback; } };
-const save = (key: string, value: unknown) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* sin almacenamiento */ } };
-
-// Guía para conectar Gmail: se hace una sola vez. El código personal se crea solo y nunca se muestra.
-function GmailSetup({ row, providers, onRow, onClose }: { row: TokenRow | null; providers: string[]; onRow: (row: TokenRow) => void; onClose: () => void }) {
-  const { user } = useAuth();
-  const [ownName, setOwnName] = useState(() => readSaved("finanzas-own-name-v2", ""));
-  const [script, setScript] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [showText, setShowText] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => { save("finanzas-own-name-v2", ownName); }, [ownName]);
-
-  // Si todavía no hay código personal, se crea en silencio al abrir la guía.
-  useEffect(() => {
-    if (row || !supabase) return;
-    supabase.from("import_tokens").upsert({ user_id: user.id, token: newToken() }, { onConflict: "user_id" }).select("token, last_import_at, last_result").single().then(({ data, error: saveError }) => {
-      if (saveError || !data) setError("No se pudo preparar la conexión. ¿Ya se actualizó la base de datos?");
-      else onRow(data as TokenRow);
-    });
-  }, [row, user.id, onRow]);
-
-  useEffect(() => {
-    if (!row) return;
-    let active = true;
-    buildAccountsScript({ url: import.meta.env.VITE_SUPABASE_URL, key: import.meta.env.VITE_SUPABASE_ANON_KEY, token: row.token, ownName, providers })
-      .then((text) => { if (active) setScript(text); })
-      .catch(() => { if (active) setError("No se pudo preparar el lector. Recargá la página."); });
-    return () => { active = false; };
-  }, [row, ownName, providers]);
-
-  const copyAndOpen = async () => {
-    try {
-      await navigator.clipboard.writeText(script);
-      setCopied(true);
-    } catch {
-      setShowText(true);
-      setError("No se pudo copiar solo. Abrí “Ver el texto” y copialo a mano.");
-    }
-    window.open("https://script.google.com/home/projects/create", "_blank", "noopener");
-  };
-
-  return (
-    <Sheet title="Conectar tu Gmail" onClose={onClose}>
-      <p className="-mt-2 text-sm text-[var(--muted)]">Se hace <strong className="text-[var(--text)]">una sola vez</strong>. Google no deja que una app lea tu Gmail sin una revisión de seguridad muy cara, así que el lector queda guardado en tu propia cuenta de Google y desde ahí carga tus avisos cada 5 días.</p>
-
-      <label className="mt-4 block">
-        <span className={label}>1 · Tu nombre como aparece en tus cuentas</span>
-        <input value={ownName} onChange={(event) => setOwnName(event.target.value)} placeholder="Ej.: Gino Sebastian Agostinelli" className={field} />
-        <span className="mt-1 block text-xs text-[var(--muted)]">Para no contar como gasto la plata que te pasás a vos mismo.</span>
-      </label>
-
-      <div className="mt-4">
-        <p className={label}>2 · Copiá el lector y abrí Google</p>
-        <button type="button" disabled={!script} onClick={copyAndOpen} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] font-bold text-[var(--accent-text)] disabled:opacity-60">{copied ? <><Check size={18} />Copiado · se abrió Google</> : <><Copy size={18} />Copiar y abrir Google</>}</button>
-        <p className="mt-1 text-xs text-[var(--muted)]">Entrá con la cuenta de Gmail donde te llegan los avisos.</p>
-      </div>
-
-      <div className="mt-4">
-        <p className={label}>3 · En Google</p>
-        <ol className="list-decimal space-y-1.5 pl-5 text-sm">
-          <li>Borrá lo que aparece escrito y pegá (mantené apretado → Pegar, o Ctrl+V).</li>
-          <li>Tocá el ícono de guardar.</li>
-          <li>Arriba elegí <strong>activar</strong> y tocá <strong>Ejecutar</strong>.</li>
-          <li>Tocá <strong>Revisar permisos</strong> → tu cuenta. Si dice "Google no verificó esta app": <strong>Configuración avanzada</strong> → <strong>Ir a… (no seguro)</strong> → <strong>Permitir</strong>. Es tu propio lector.</li>
-        </ol>
-      </div>
-
-      {error && <p role="alert" className="mt-4 text-sm text-[var(--expense)]">{error}</p>}
-      <button type="button" onClick={() => setShowText((value) => !value)} className="mt-4 flex items-center gap-1 text-xs font-semibold text-[var(--muted)]"><ChevronDown size={14} className={showText ? "rotate-180" : ""} />Ver el texto</button>
-      {showText && <textarea readOnly value={script} rows={5} onFocus={(event) => event.currentTarget.select()} className="mt-2 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3 font-mono text-xs" aria-label="Lector para Google" />}
-      <button type="button" onClick={onClose} className="mt-5 h-11 w-full rounded-2xl border border-[var(--border)] font-semibold">Listo</button>
-    </Sheet>
-  );
-}
 
 export default function ConnectPage() {
   const { user } = useAuth();
   const cardsData = useCards(user.id);
-  const [row, setRow] = useState<TokenRow | null>(null);
-  const [selected, setSelected] = useState<string[]>(() => readSaved("finanzas-providers", AUTO_PROVIDERS.map((provider) => provider.id)));
-  const [error, setError] = useState("");
-  const [setup, setSetup] = useState(false);
+  const gmail = useGmail(user.id);
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState<Provider | null>(null);
   const [added, setAdded] = useState("");
 
+  // Mensaje al volver de Google (…/conectar?gmail=ok).
   useEffect(() => {
-    if (!supabase) return;
-    supabase.from("import_tokens").select("token, last_import_at, last_result").maybeSingle().then(({ data, error: loadError }) => {
-      if (loadError) setError("No se pudo cargar la conexión. ¿Ya se actualizó la base de datos?");
-      setRow((data as TokenRow | null) ?? null);
-    });
-  }, [user.id]);
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("gmail");
+    if (!status) return;
+    setNotice(RETURN_MESSAGES[status] ?? RETURN_MESSAGES.error);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
-  useEffect(() => { save("finanzas-providers", selected); }, [selected]);
-
-  const toggle = (id: string) => setSelected((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
-  const connected = Boolean(row?.last_import_at);
+  const link = gmail.link;
+  const providers = link?.providers ?? AUTO_PROVIDERS.map((provider) => provider.id);
+  const toggle = (id: string) => gmail.setProviders(providers.includes(id) ? providers.filter((entry) => entry !== id) : [...providers, id]);
   const text = query.trim().toLowerCase();
   const manual = PROVIDERS.filter((provider) => !provider.auto && (!text || provider.name.toLowerCase().includes(text)));
   const hasCard = (provider: Provider) => cardsData.cards.some((card) => card.provider === provider.id || card.name.toLowerCase() === provider.name.toLowerCase());
 
+  const refresh = async () => {
+    const result = await gmail.refresh();
+    if (result) setNotice({ text: result.movimientos ? "Actualizado: " + result.movimientos + (result.movimientos === 1 ? " movimiento nuevo." : " movimientos nuevos.") : "Actualizado: no había movimientos nuevos.", ok: true });
+  };
+
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <ErrorBox message={error || cardsData.error} />
+      <ErrorBox message={gmail.error || cardsData.error} />
+      {notice && <p role="status" className={"rounded-2xl px-4 py-3 text-sm font-medium " + (notice.ok ? "bg-[var(--surface)] text-[var(--income)]" : "bg-[var(--expense-soft)] text-[var(--expense)]")}>{notice.text}</p>}
+
       <section className="rounded-[28px] bg-[var(--hero)] p-5 text-[var(--hero-text)]">
         <p className="flex items-center gap-2 text-sm opacity-80"><Mail size={16} />Bancos, billeteras y tarjetas</p>
         <p className="mt-1 text-2xl font-bold">Conectá tus cuentas</p>
-        <p className="mt-2 text-sm opacity-80">Las que te mandan avisos por mail se cargan solas. Las demás las agregás como tarjeta y cargás las cuotas una vez.</p>
+        <p className="mt-2 text-sm opacity-80">Conectá tu Gmail y los avisos de tus cuentas se cargan solos todos los días. Las demás las agregás como tarjeta.</p>
       </section>
 
-      <Card className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-semibold">Se cargan solas por mail</p>
-            <p className="text-sm text-[var(--muted)]">{connected ? "Tu Gmail está conectado." : "Conectá tu Gmail una vez y listo."}</p>
-          </div>
-          {connected && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--surface-2)] px-3 py-1 text-xs font-semibold text-[var(--income)]"><Check size={14} />Conectado</span>}
-        </div>
-        <div className="divide-y divide-[var(--border)]">
-          {AUTO_PROVIDERS.map((provider) => (
-            <label key={provider.id} className="flex cursor-pointer items-center gap-3 py-3">
-              <ProviderIcon name={provider.name} color={provider.color} provider={provider.id} />
-              <span className="min-w-0 flex-1"><span className="block font-semibold">{provider.name}</span><span className="block text-xs text-[var(--muted)]">{provider.auto}</span></span>
-              <input type="checkbox" checked={selected.includes(provider.id)} onChange={() => toggle(provider.id)} className="h-6 w-6 accent-[var(--primary)]" />
-            </label>
-          ))}
-        </div>
-        {connected ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[var(--surface-2)] px-3 py-2 text-sm">
-            <span>Última lectura: {new Date(row!.last_import_at!).toLocaleString("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}{row?.last_result && " · " + (row.last_result.movimientos ?? 0) + " nuevos"}</span>
-            <button type="button" onClick={() => setSetup(true)} className="text-xs font-semibold text-[var(--primary-text)]">Volver a configurar</button>
-          </div>
+      <Card className="space-y-4">
+        {link ? (
+          <>
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface-2)] text-[var(--income)]"><Check size={22} /></span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">Gmail conectado</p>
+                <p className="truncate text-sm text-[var(--muted)]">{link.email ?? "Tu cuenta de Google"}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[var(--surface-2)] px-3 py-2 text-sm">
+              <span className="text-[var(--muted)]">{link.last_sync_at ? "Última lectura: " + new Date(link.last_sync_at).toLocaleString("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Todavía no se leyó"}{link.last_result?.movimientos ? " · " + link.last_result.movimientos + " nuevos" : ""}</span>
+              <button type="button" disabled={gmail.busy} onClick={refresh} className="inline-flex items-center gap-1.5 font-semibold text-[var(--primary-text)] disabled:opacity-60"><RefreshCw size={15} className={gmail.busy ? "animate-spin" : ""} />{gmail.busy ? "Leyendo…" : "Actualizar ahora"}</button>
+            </div>
+          </>
         ) : (
-          <button type="button" onClick={() => setSetup(true)} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] font-semibold text-white"><Mail size={18} />Conectar Gmail</button>
+          <>
+            <div>
+              <p className="text-lg font-semibold">Conectá tu Gmail</p>
+              <p className="text-sm text-[var(--muted)]">Entrás con tu cuenta de Google, aceptás y listo. Se hace una sola vez.</p>
+            </div>
+            <button type="button" disabled={!gmail.loaded || gmail.busy} onClick={gmail.connect} className="flex h-13 w-full items-center justify-center gap-3 rounded-2xl border border-[var(--border)] bg-white py-3.5 text-base font-semibold text-[#1f1f1f] shadow-sm disabled:opacity-60">
+              <Mail size={20} className="text-[#ea4335]" />{gmail.busy ? "Abriendo Google…" : "Conectar con Google"}
+            </button>
+            <p className="text-xs text-[var(--muted)]">Como la app es nueva, Google puede mostrarte un aviso: tocá <strong>Configuración avanzada</strong> → <strong>Ir a Finanzas Personales</strong> y después <strong>Continuar</strong>.</p>
+          </>
         )}
-        <p className="flex gap-2 text-xs text-[var(--muted)]"><ShieldCheck size={16} className="shrink-0 text-[var(--income)]" />No entra a tus cuentas ni a tus tarjetas: solo lee los avisos que ya te llegaron al mail.</p>
+
+        <div>
+          <p className={label}>{link ? "Qué se carga solo" : "Qué se va a cargar solo"}</p>
+          <div className="divide-y divide-[var(--border)]">
+            {AUTO_PROVIDERS.map((provider) => (
+              <label key={provider.id} className={"flex items-center gap-3 py-3 " + (link ? "cursor-pointer" : "")}>
+                <ProviderIcon name={provider.name} color={provider.color} provider={provider.id} />
+                <span className="min-w-0 flex-1"><span className="block font-semibold">{provider.name}</span><span className="block text-xs text-[var(--muted)]">{provider.auto}</span></span>
+                {link && <input type="checkbox" checked={providers.includes(provider.id)} onChange={() => toggle(provider.id)} className="h-6 w-6 accent-[var(--primary)]" />}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <p className="flex gap-2 text-xs text-[var(--muted)]"><ShieldCheck size={16} className="shrink-0 text-[var(--income)]" />Solo pedimos permiso para leer: nunca enviamos, borramos ni tocamos tus mails, y solo miramos los avisos de estas cuentas.</p>
+        {link && <button type="button" onClick={() => { if (window.confirm("¿Desconectar tu Gmail? Los movimientos que ya se cargaron quedan.")) gmail.disconnect(); }} className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--expense)]">Desconectar Gmail</button>}
       </Card>
+
+      {link && <StatementSources userId={user.id} />}
 
       <Card className="space-y-3">
         <div>
@@ -194,9 +140,7 @@ export default function ConnectPage() {
         )}
       </Card>
 
-      {setup && <GmailSetup row={row} providers={selected} onRow={setRow} onClose={() => setSetup(false)} />}
       {adding && <NewCardSheet initial={adding.id ? adding : undefined} onSave={async (input) => { const created = await cardsData.addCard(input); if (created) setAdded(created.name); return created; }} onClose={() => setAdding(null)} />}
-      <a href="https://script.google.com/home" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 text-xs text-[var(--muted)]">Ver tu lector en Google <ExternalLink size={12} /></a>
     </div>
   );
 }
