@@ -7,6 +7,7 @@ import { CategoryIcon, Card, ErrorBox, MonthPicker, StackedBar, Tabs } from "./u
 import { findCategory, useCategories } from "../lib/categories";
 import { currentMonthISO, dayLabel, monthLabel, money, timeLabel, usd } from "../lib/format";
 import { cardMonthSummary, useCards, type CreditCard } from "../lib/cards";
+import StatementSources from "./StatementSources";
 import { useFixed, type FixedRowView } from "../lib/fixed";
 import { PaySheet, ProviderIcon } from "./sheets";
 import { hasDetail, useMovements, type MovementType } from "../lib/movements";
@@ -73,6 +74,8 @@ export default function ExpensesPage() {
       </section>
 
       <ErrorBox message={error} />
+
+      <StatementSources userId={user.id} onlyPending />
 
       {hasObligations && (
         <Card>

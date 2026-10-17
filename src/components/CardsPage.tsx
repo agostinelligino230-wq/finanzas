@@ -40,6 +40,12 @@ export default function CardsPage() {
         const summary = cardMonthSummary(items, statements, card.id, month, payments);
         const monthItems = itemsForMonth(items, card.id, month).sort((a, b) => b.amount - a.amount);
         const diff = summary.statement ? summary.statement.total - summary.loaded : 0;
+        // Lo que todavía falta pagar de compras en cuotas (después de este mes).
+        const remaining = items.filter((item) => item.cardId === card.id && item.kind === "cuotas").reduce((sum, item) => {
+          const n = installmentNumber(item, month);
+          const left = n === null ? (item.firstMonth > month ? item.installments ?? 0 : 0) : (item.installments ?? 1) - n;
+          return sum + item.amount * left;
+        }, 0);
         return (
           <Card key={card.id} className="space-y-3">
             <div className="flex items-center gap-3">
@@ -55,9 +61,25 @@ export default function CardsPage() {
               <div className="flex items-start gap-2 rounded-2xl bg-[var(--surface-2)] p-3 text-sm">
                 <Mail size={16} className="mt-0.5 shrink-0 text-[var(--primary-text)]" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold">Resumen {summary.statement.source === "gmail" ? "que llegó por mail" : "del mes"}: {money(summary.statement.total)}{summary.statement.totalUsd > 0 && " + " + usd(summary.statement.totalUsd)}</p>
-                  {summary.statement.dueDate && <p className="text-[var(--muted)]">Vence el {new Date(summary.statement.dueDate + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long" })}</p>}
-                  {Math.abs(diff) >= 1 && <p className="mt-1 text-[var(--muted)]">Cargado en la app: {money(summary.loaded)} · {diff > 0 ? "hay " + money(diff) + " de compras que no están cargadas acá" : "cargaste " + money(-diff) + " de más (¿alguna cuota ya terminó?)"}</p>}
+                  <p className="font-semibold">Resumen {summary.statement.source === "pdf" ? "leído del PDF" : summary.statement.source === "gmail" ? "que llegó por mail" : "del mes"}: {money(summary.statement.total)}{summary.statement.totalUsd > 0 && " + " + usd(summary.statement.totalUsd)}</p>
+                  {(summary.statement.dueDate || summary.statement.minPayment) && <p className="text-[var(--muted)]">{[summary.statement.dueDate && "Vence el " + new Date(summary.statement.dueDate + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long" }), summary.statement.minPayment && "pago mínimo " + money(summary.statement.minPayment)].filter(Boolean).join(" · ")}</p>}
+                  {summary.statement.source !== "pdf" && Math.abs(diff) >= 1 && <p className="mt-1 text-[var(--muted)]">Cargado en la app: {money(summary.loaded)} · {diff > 0 ? "hay " + money(diff) + " de compras que no están cargadas acá" : "cargaste " + money(-diff) + " de más (¿alguna cuota ya terminó?)"}</p>}
+                  {summary.statement.lines.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer font-semibold text-[var(--primary-text)]">Ver los {summary.statement.lines.filter((line) => line.kind !== "pago").length} gastos del resumen</summary>
+                      <div className="mt-2 divide-y divide-[var(--border)]">
+                        {summary.statement.lines.map((line, index) => (
+                          <div key={index} className="flex items-center gap-2 py-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate">{line.description}</p>
+                              <p className="text-xs text-[var(--muted)]">{[line.date && new Date(line.date + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "short" }), line.cuota && "cuota " + line.cuota.n + " de " + line.cuota.m, line.kind === "cargo" && "impuesto o cargo", line.kind === "pago" && "pago"].filter(Boolean).join(" · ")}</p>
+                            </div>
+                            <span className={"shrink-0 tabular-nums " + (line.kind === "pago" ? "text-[var(--income)]" : "")}>{line.kind === "pago" ? "−" : ""}{line.currency === "USD" ? usd(line.amount) : money(line.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
               </div>
             )}
@@ -86,6 +108,8 @@ export default function CardsPage() {
                 })}
               </div>
             )}
+
+            {remaining > 0 && <p className="px-1 text-sm text-[var(--muted)]">Después de este mes te quedan <strong className="text-[var(--text)]">{money(remaining)}</strong> en cuotas por pagar.</p>}
 
             {summary.payment ? (
               <button type="button" onClick={() => { if (window.confirm("¿Desmarcar el pago de " + card.name + "? También se quita de tus gastos del mes.")) unpayCard(card, month); }} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--surface-2)] font-semibold text-[var(--income)]"><Check size={18} />Pagaste {money(summary.payment.amount)}</button>

@@ -7,9 +7,10 @@ import { useGmail } from "../lib/gmail";
 import { useAuth } from "./AuthGate";
 import { Card, ErrorBox, sheetLabel as label } from "./ui";
 import { NewCardSheet, ProviderIcon } from "./sheets";
+import StatementSources from "./StatementSources";
 
 const RETURN_MESSAGES: Record<string, { text: string; ok: boolean }> = {
-  ok: { text: "¡Listo! Tu Gmail quedó conectado y ya trajimos tus últimos movimientos.", ok: true },
+  ok: { text: "¡Listo! Tu Gmail quedó conectado y ya trajimos tus últimos movimientos. Abajo te preguntamos si analizamos los resúmenes de tus tarjetas.", ok: true },
   cancelado: { text: "No se conectó: cancelaste en la pantalla de Google.", ok: false },
   "sin-permiso": { text: "Falta un permiso: en la pantalla de Google tildá “Ver tus mensajes de correo electrónico” y probá de nuevo.", ok: false },
   error: { text: "Algo falló al conectar. Probá de nuevo.", ok: false },
@@ -100,6 +101,8 @@ export default function ConnectPage() {
         <p className="flex gap-2 text-xs text-[var(--muted)]"><ShieldCheck size={16} className="shrink-0 text-[var(--income)]" />Solo pedimos permiso para leer: nunca enviamos, borramos ni tocamos tus mails, y solo miramos los avisos de estas cuentas.</p>
         {link && <button type="button" onClick={() => { if (window.confirm("¿Desconectar tu Gmail? Los movimientos que ya se cargaron quedan.")) gmail.disconnect(); }} className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--expense)]">Desconectar Gmail</button>}
       </Card>
+
+      {link && <StatementSources userId={user.id} />}
 
       <Card className="space-y-3">
         <div>
