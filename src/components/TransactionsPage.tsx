@@ -3,7 +3,7 @@ import { Download, Search } from "lucide-react";
 import { useAuth } from "./AuthGate";
 import { CategoryIcon, Card, ErrorBox, MonthPicker, Tabs } from "./ui";
 import { findCategory, useCategories, type Category } from "../lib/categories";
-import { currentMonthISO, dayLabel, money, timeLabel } from "../lib/format";
+import { currentMonthISO, dayLabel, money, timeLabel, usd } from "../lib/format";
 import { hasDetail, useMovements, type Movement } from "../lib/movements";
 
 type Filter = "todos" | "gasto" | "ingreso";
@@ -14,10 +14,10 @@ const csvCell = (value: string | number) => {
 };
 
 function downloadCsv(rows: Movement[], categories: Category[], fileName: string) {
-  const header = ["Fecha", "Hora", "Tipo", "Categoría", "Detalle", "Monto", "Estado"];
+  const header = ["Fecha", "Hora", "Tipo", "Categoría", "Detalle", "Monto (pesos)", "Estado", "Moneda original", "Monto original", "Cotización"];
   const lines = rows.map((item) => {
     const category = findCategory(categories, item.type, item.category);
-    return [item.date, timeLabel(item.createdAt), item.type === "gasto" ? "Gasto" : "Ingreso", category.name, item.description, item.type === "gasto" ? -item.amount : item.amount, item.type === "gasto" ? (item.paid ? "Pagado" : "Pendiente") : "Cobrado"].map(csvCell).join(";");
+    return [item.date, timeLabel(item.createdAt), item.type === "gasto" ? "Gasto" : "Ingreso", category.name, item.description, item.type === "gasto" ? -item.amount : item.amount, item.type === "gasto" ? (item.paid ? "Pagado" : "Pendiente") : "Cobrado", item.currency, item.original ?? "", item.rate ?? ""].map(csvCell).join(";");
   });
   const blob = new Blob(["﻿" + [header.join(";"), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -89,7 +89,7 @@ export default function TransactionsPage() {
                   <CategoryIcon category={category} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold"><span style={{ color: category.color }}>{category.name}</span>{hasDetail(item, category.name) && <span> ({item.description})</span>}</p>
-                    <p className="text-xs text-[var(--muted)]">{timeLabel(item.createdAt)} hs{item.type === "gasto" && !item.paid && " · pendiente de pago"}</p>
+                    <p className="text-xs text-[var(--muted)]">{timeLabel(item.createdAt)} hs{item.type === "gasto" && !item.paid && " · pendiente de pago"}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}{item.source === "uala" && " · desde Ualá"}</p>
                   </div>
                   <span className="shrink-0 font-bold tabular-nums" style={{ color: item.type === "ingreso" ? "var(--income)" : "var(--text)" }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</span>
                 </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, CalendarClock, Home, Lightbulb, ListOrdered, LogOut, Menu, Moon, PiggyBank, Sun, X } from "lucide-react";
+import { BarChart3, CalendarClock, CreditCard, Home, Lightbulb, ListOrdered, LogOut, Mail, Menu, Moon, PiggyBank, Sun, X } from "lucide-react";
 import { useAuth } from "./AuthGate";
 import { prefetchAll } from "../lib/cache";
 
@@ -9,10 +9,12 @@ const items = [
   { to: "/movimientos", label: "Movimientos", short: "Movim.", icon: ListOrdered },
   { to: "/graficos", label: "Gráficos", short: "Gráficos", icon: BarChart3 },
   { to: "/gastos-fijos", label: "Gastos fijos", short: "Fijos", icon: CalendarClock },
+  { to: "/tarjetas", label: "Tarjetas", short: "Tarjetas", icon: CreditCard },
   { to: "/ahorro", label: "Ahorro", short: "Ahorro", icon: PiggyBank },
   { to: "/sugerencias", label: "Sugerencias", short: "Ideas", icon: Lightbulb },
+  { to: "/conectar-uala", label: "Conectar Ualá", short: "Ualá", icon: Mail },
 ];
-const bottomItems = items.slice(0, 5);
+const bottomItems = items.filter((item) => ["/", "/movimientos", "/gastos-fijos", "/tarjetas", "/graficos"].includes(item.to));
 
 export default function Layout() {
   const [open, setOpen] = useState(false);

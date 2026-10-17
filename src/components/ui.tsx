@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Tag } from "lucide-react";
+import { ChevronLeft, ChevronRight, Tag, X } from "lucide-react";
 import { ICONS, type Category } from "../lib/categories";
 import { monthLabel, shiftMonth } from "../lib/format";
 
@@ -49,6 +49,23 @@ export function StackedBar({ parts }: { parts: { key: string; value: number; col
   return (
     <div className="flex h-3 w-full overflow-hidden rounded-full bg-[var(--surface-2)]">
       {total > 0 && parts.map((part) => <span key={part.key} style={{ width: (part.value / total) * 100 + "%", backgroundColor: part.color }} />)}
+    </div>
+  );
+}
+
+export const sheetField = "h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 text-base outline-none focus:border-[var(--primary)]";
+export const sheetLabel = "mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]";
+
+export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:items-center sm:p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()} className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-[28px] bg-[var(--surface)] p-5 pb-8 text-[var(--text)] shadow-2xl sm:rounded-[28px]">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold">{title}</h2>
+          <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[var(--surface-2)]" aria-label="Cerrar"><X size={20} /></button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

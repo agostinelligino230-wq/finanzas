@@ -1,16 +1,19 @@
 import { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Check, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, ChevronDown, CreditCard, Plus, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useAuth } from "./AuthGate";
 import AddMovementSheet from "./AddMovementSheet";
 import { CategoryIcon, Card, ErrorBox, MonthPicker, StackedBar, Tabs } from "./ui";
 import { findCategory, useCategories } from "../lib/categories";
-import { currentMonthISO, dayLabel, monthLabel, money, timeLabel } from "../lib/format";
+import { currentMonthISO, dayLabel, monthLabel, money, timeLabel, usd } from "../lib/format";
+import { cardsMonthTotal, useCards } from "../lib/cards";
 import { hasDetail, useMovements, type MovementType } from "../lib/movements";
 
 export default function ExpensesPage() {
   const { user } = useAuth();
   const { movements, error, add, togglePaid, remove } = useMovements(user.id);
   const { categories, addCategory } = useCategories(user.id);
+  const { cards, items: cardItems, statements } = useCards(user.id);
   const [month, setMonth] = useState(currentMonthISO());
   const [tab, setTab] = useState<MovementType>("gasto");
   const [open, setOpen] = useState<string | null>(null);
@@ -19,7 +22,12 @@ export default function ExpensesPage() {
   const monthItems = useMemo(() => movements.filter((item) => item.date.startsWith(month)), [movements, month]);
   const income = monthItems.filter((item) => item.type === "ingreso").reduce((sum, item) => sum + item.amount, 0);
   const expense = monthItems.filter((item) => item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
-  const available = income - expense;
+  const cardsTotal = cardsMonthTotal(cards, cardItems, statements, month);
+  const available = income - expense - cardsTotal;
+  const tileText = cards.length > 0 ? "text-sm sm:text-lg" : "text-lg";
+  const dollarIncome = monthItems.filter((item) => item.type === "ingreso" && item.currency === "USD");
+  const dollarTotal = dollarIncome.reduce((sum, item) => sum + (item.original ?? 0), 0);
+  const dollarPesos = dollarIncome.reduce((sum, item) => sum + item.amount, 0);
   const accumulated = movements.reduce((sum, item) => sum + (item.type === "ingreso" ? item.amount : -item.amount), 0);
   const pending = monthItems.filter((item) => item.type === "gasto" && !item.paid).reduce((sum, item) => sum + item.amount, 0);
 
@@ -43,15 +51,22 @@ export default function ExpensesPage() {
       <section className="rounded-[28px] bg-[var(--hero)] p-5 text-[var(--hero-text)] sm:p-6">
         <p className="text-sm opacity-80">Disponible en {monthLabel(month)}</p>
         <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums sm:text-5xl" style={{ color: available < 0 ? "#ffb3c0" : undefined }}>{money(available)}</p>
-        <div className="mt-5 grid grid-cols-2 gap-3">
+        {dollarTotal > 0 && <p className="mt-1 text-sm opacity-80">Tus ingresos incluyen <strong>{usd(dollarTotal)}</strong> ≈ {money(dollarPesos)}</p>}
+        <div className={"mt-5 grid " + (cards.length > 0 ? "grid-cols-3 gap-2 sm:gap-3" : "grid-cols-2 gap-3")}>
           <div className="rounded-2xl bg-white/10 p-3">
             <p className="flex items-center gap-1.5 text-xs opacity-80"><ArrowDownLeft size={14} />Ingresos</p>
-            <p className="mt-1 text-lg font-bold tabular-nums">{money(income)}</p>
+            <p className={"mt-1 font-bold tabular-nums " + tileText}>{money(income)}</p>
           </div>
           <div className="rounded-2xl bg-white/10 p-3">
             <p className="flex items-center gap-1.5 text-xs opacity-80"><ArrowUpRight size={14} />Gastos</p>
-            <p className="mt-1 text-lg font-bold tabular-nums">{money(expense)}</p>
+            <p className={"mt-1 font-bold tabular-nums " + tileText}>{money(expense)}</p>
           </div>
+          {cards.length > 0 && (
+            <Link to="/tarjetas" className="rounded-2xl bg-white/10 p-3">
+              <p className="flex items-center gap-1.5 text-xs opacity-80"><CreditCard size={14} />Tarjetas</p>
+              <p className={"mt-1 font-bold tabular-nums " + tileText}>{money(cardsTotal)}</p>
+            </Link>
+          )}
         </div>
         <p className="mt-4 text-xs opacity-75">Saldo acumulado de todos los meses: <strong className="tabular-nums">{money(accumulated)}</strong>{pending > 0 && <> · Falta pagar este mes: <strong className="tabular-nums">{money(pending)}</strong></>}</p>
       </section>
@@ -104,7 +119,7 @@ export default function ExpensesPage() {
                         ) : <span className="w-8" />}
                         <div className="min-w-0 flex-1">
                           <p className={"truncate text-sm font-medium " + (item.type === "gasto" && !item.paid ? "text-[var(--muted)]" : "")}>{hasDetail(item, category.name) ? item.description : category.name}{item.type === "gasto" && !item.paid && " · pendiente"}</p>
-                          <p className="text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}</p>
+                          <p className="text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}{item.source === "uala" && " · desde Ualá"}</p>
                         </div>
                         <span className="shrink-0 text-sm font-semibold tabular-nums">{money(item.amount)}</span>
                         <button type="button" onClick={() => { if (window.confirm("¿Eliminar este movimiento?")) remove(item); }} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--expense-soft)] hover:text-[var(--expense)]" aria-label="Eliminar"><Trash2 size={16} /></button>

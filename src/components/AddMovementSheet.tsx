@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { COLORS, ICON_GROUPS, ICONS, type Category } from "../lib/categories";
-import { daysAgoISO, money, parseAmount, todayISO } from "../lib/format";
-import type { MovementType, NewMovement } from "../lib/movements";
+import { daysAgoISO, money, parseAmount, todayISO, usd } from "../lib/format";
+import type { Currency, MovementType, NewMovement } from "../lib/movements";
+import { getDollarQuote, type DollarQuote } from "../lib/dollar";
 import { CategoryIcon, Tabs } from "./ui";
 
 type Props = {
@@ -72,16 +73,38 @@ export default function AddMovementSheet({ open, initialKind, categories, onAddC
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [currency, setCurrency] = useState<Currency>("ARS");
+  const [rate, setRate] = useState("");
+  const [rateTouched, setRateTouched] = useState(false);
+  const [quote, setQuote] = useState<DollarQuote | null>(null);
+  const [quoteState, setQuoteState] = useState<"idle" | "loading" | "error">("idle");
 
   useEffect(() => {
     if (!open) return;
     setKind(initialKind); setAmount(""); setCategory(""); setDate(todayISO()); setDescription(""); setPaid(true); setCreating(false); setError("");
+    setCurrency("ARS"); setRate(""); setRateTouched(false);
   }, [open, initialKind]);
+
+  // Al elegir dólares, trae la cotización del momento y la propone (se puede cambiar).
+  useEffect(() => {
+    if (!open || currency !== "USD" || quote) return;
+    let active = true;
+    setQuoteState("loading");
+    getDollarQuote().then((result) => { if (!active) return; setQuote(result); setQuoteState(result ? "idle" : "error"); });
+    return () => { active = false; };
+  }, [open, currency, quote]);
+
+  useEffect(() => {
+    if (currency !== "USD" || !quote || rateTouched) return;
+    setRate(String(Math.round(kind === "ingreso" ? quote.buy : quote.sell)));
+  }, [currency, quote, kind, rateTouched]);
 
   if (!open) return null;
 
   const list = categories.filter((item) => item.kind === kind);
   const value = parseAmount(amount);
+  const rateValue = parseAmount(rate);
+  const pesos = currency === "USD" ? Math.round(value * rateValue * 100) / 100 : value;
   const quickDates = [{ label: "Hoy", value: todayISO() }, { label: "Ayer", value: daysAgoISO(1) }, { label: "Anteayer", value: daysAgoISO(2) }];
   const isQuick = quickDates.some((item) => item.value === date);
 
@@ -89,10 +112,11 @@ export default function AddMovementSheet({ open, initialKind, categories, onAddC
 
   const save = async () => {
     if (!(value > 0)) { setError("Escribí un monto mayor a cero."); return; }
+    if (currency === "USD" && !(rateValue > 0)) { setError("Escribí a cuántos pesos está el dólar."); return; }
     if (!category) { setError("Elegí una categoría."); return; }
     if (!date) { setError("Elegí una fecha."); return; }
     setBusy(true);
-    const ok = await onSave({ description: description.trim(), amount: value, category, date, type: kind, paid: kind === "ingreso" ? true : paid });
+    const ok = await onSave({ description: description.trim(), amount: pesos, category, date, type: kind, paid: kind === "ingreso" ? true : paid, ...(currency === "USD" ? { currency: "USD" as const, original: value, rate: rateValue } : {}) });
     setBusy(false);
     if (ok) onClose();
     else setError("No se pudo guardar. Revisá tu conexión y probá de nuevo.");
@@ -107,9 +131,29 @@ export default function AddMovementSheet({ open, initialKind, categories, onAddC
         </div>
         <Tabs value={kind} onChange={changeKind} options={[{ value: "gasto", label: "Gasto" }, { value: "ingreso", label: "Ingreso" }]} />
 
-        <div className="mt-5 text-center">
+        <div className="mt-4 flex justify-center">
+          <div className="flex rounded-full bg-[var(--surface-2)] p-1 text-sm font-semibold">
+            {(["ARS", "USD"] as const).map((item) => <button key={item} type="button" onClick={() => setCurrency(item)} className={"h-8 rounded-full px-4 " + (currency === item ? "bg-[var(--surface)] text-[var(--text)] shadow-sm" : "text-[var(--muted)]")}>{item === "ARS" ? "$ Pesos" : "US$ Dólares"}</button>)}
+          </div>
+        </div>
+
+        <div className="mt-3 text-center">
           <input value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d.,]/g, ""))} inputMode="decimal" placeholder="0" aria-label="Monto" className="w-full bg-transparent text-center text-4xl font-bold tabular-nums outline-none placeholder:text-[var(--muted)]" style={{ color: kind === "gasto" ? "var(--expense)" : "var(--income)" }} />
-          <p className="mt-1 text-sm text-[var(--muted)]">{value > 0 ? money(value) : "Pesos argentinos"}</p>
+          {currency === "ARS" ? (
+            <p className="mt-1 text-sm text-[var(--muted)]">{value > 0 ? money(value) : "Pesos argentinos"}</p>
+          ) : (
+            <div className="mt-2 space-y-2">
+              <p className="text-sm text-[var(--muted)]">{value > 0 ? usd(value) : "Dólares"}{value > 0 && rateValue > 0 && <> ≈ <strong className="text-[var(--text)]">{money(pesos)}</strong></>}</p>
+              <label className="mx-auto flex max-w-xs items-center gap-2 rounded-2xl bg-[var(--surface-2)] px-4 py-2 text-left">
+                <span className="whitespace-nowrap text-sm text-[var(--muted)]">1 US$ =</span>
+                <input value={rate} onChange={(event) => { setRate(event.target.value.replace(/[^\d.,]/g, "")); setRateTouched(true); }} inputMode="decimal" placeholder="Cotización" aria-label="Cotización del dólar en pesos" className="w-full bg-transparent text-base font-semibold tabular-nums outline-none" />
+                <span className="text-sm text-[var(--muted)]">pesos</span>
+              </label>
+              <p className="text-xs text-[var(--muted)]">
+                {quoteState === "loading" ? "Buscando la cotización…" : quote ? <>Sugerida: {quote.source} ({kind === "ingreso" ? "compra" : "venta"}). Cambiala por la de Wallbit si es distinta.</> : quoteState === "error" ? "No pude traer la cotización: escribí la que te muestra Wallbit." : ""}
+              </p>
+            </div>
+          )}
         </div>
 
         <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Categoría</p>
