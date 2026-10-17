@@ -10,17 +10,18 @@ export type CardItemKind = "cuotas" | "fijo";
 // "firstMonth" es el mes en que se paga la primera cuota (o desde cuándo corre el fijo).
 export type CardItem = { id: string; cardId: string; description: string; kind: CardItemKind; amount: number; installments: number | null; firstMonth: string; endMonth: string | null };
 export type CardPayment = { cardId: string; month: string; amount: number };
-export type CardStatement = { id: string; cardId: string; month: string; total: number; totalUsd: number; dueDate: string | null; paid: boolean; source: string | null };
+export type StatementLine = { date: string | null; description: string; amount: number; currency: "ARS" | "USD"; kind: "consumo" | "cargo" | "pago"; cuota?: { n: number; m: number } };
+export type CardStatement = { id: string; cardId: string; month: string; total: number; totalUsd: number; dueDate: string | null; paid: boolean; source: string | null; closingDate: string | null; minPayment: number | null; lines: StatementLine[] };
 
 type CardRow = { id: string; name: string; color: string; due_day: number | null; provider?: string | null };
 type PaymentRow = { card_id: string; month: string; amount: number | string };
 type ItemRow = { id: string; card_id: string; description: string; kind: CardItemKind; amount: number | string; installments: number | null; first_month: string; end_month: string | null };
-type StatementRow = { id: string; card_id: string; month: string; total: number | string; total_usd: number | string; due_date: string | null; paid: boolean; source: string | null };
+type StatementRow = { id: string; card_id: string; month: string; total: number | string; total_usd: number | string; due_date: string | null; paid: boolean; source: string | null; closing_date?: string | null; min_payment?: number | string | null; details?: { consumos?: StatementLine[] } | null };
 
 const cardFromRow = (row: CardRow): CreditCard => ({ id: row.id, name: row.name, color: row.color, dueDay: row.due_day, provider: row.provider ?? null });
 const paymentFromRow = (row: PaymentRow): CardPayment => ({ cardId: row.card_id, month: row.month, amount: Number(row.amount) });
 const itemFromRow = (row: ItemRow): CardItem => ({ id: row.id, cardId: row.card_id, description: row.description, kind: row.kind, amount: Number(row.amount), installments: row.installments, firstMonth: row.first_month, endMonth: row.end_month });
-const statementFromRow = (row: StatementRow): CardStatement => ({ id: row.id, cardId: row.card_id, month: row.month, total: Number(row.total), totalUsd: Number(row.total_usd), dueDate: row.due_date, paid: row.paid, source: row.source });
+const statementFromRow = (row: StatementRow): CardStatement => ({ id: row.id, cardId: row.card_id, month: row.month, total: Number(row.total), totalUsd: Number(row.total_usd), dueDate: row.due_date, paid: row.paid, source: row.source, closingDate: row.closing_date ?? null, minPayment: row.min_payment == null ? null : Number(row.min_payment), lines: row.details?.consumos ?? [] });
 
 // Número de cuota que toca en un mes (1 = primera). null si ese mes no corresponde.
 export function installmentNumber(item: CardItem, month: string): number | null {
@@ -50,10 +51,10 @@ export function cardsMonthTotal(cards: CreditCard[], items: CardItem[], statemen
 type State = { cards: CreditCard[]; items: CardItem[]; statements: CardStatement[]; payments: CardPayment[] };
 
 export function useCards(userId: string) {
-  const [state, setState] = useState<State>(() => readCache<State>("cards_v2", userId) ?? { cards: [], items: [], statements: [], payments: [] });
+  const [state, setState] = useState<State>(() => readCache<State>("cards_v3", userId) ?? { cards: [], items: [], statements: [], payments: [] });
   const [error, setError] = useState("");
 
-  useEffect(() => { writeCache("cards_v2", userId, state); }, [state, userId]);
+  useEffect(() => { writeCache("cards_v3", userId, state); }, [state, userId]);
 
   useEffect(() => {
     if (!supabase) return;
