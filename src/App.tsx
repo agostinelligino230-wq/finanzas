@@ -21,6 +21,7 @@ export default function App() {
           <Route path="graficos" element={<ChartsPage />} />
           <Route path="gastos-fijos" element={<FixedExpensesPage />} />
           <Route path="tarjetas" element={<CardsPage />} />
+          <Route path="conectar" element={<ConnectPage />} />
           <Route path="conectar-uala" element={<ConnectPage />} />
           <Route path="ahorro" element={<SavingsPage />} />
           <Route path="sugerencias" element={<SuggestionsPage />} />
