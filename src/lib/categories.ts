@@ -41,6 +41,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
   base("gasto", "regalos", "Regalos", "Gift", "#8E5BD9"),
   base("gasto", "ahorro", "Ahorro", "PiggyBank", "#169C8C"),
   base("gasto", "transferencias", "Transferencias", "Banknote", "#3D4A63"),
+  base("gasto", "tarjeta", "Tarjetas", "CreditCard", "#5B6CF0"),
   base("gasto", "otro", "Otros", "Tag", "#607D8B"),
   base("ingreso", "salario", "Salario", "Briefcase", "#2F80ED"),
   base("ingreso", "extra", "Trabajo extra", "HandCoins", "#3BB273"),

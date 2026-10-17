@@ -24,6 +24,9 @@ export function useMovements(userId: string) {
 
   useEffect(() => { writeCache("movements", userId, movements); }, [movements, userId]);
 
+  const [version, setVersion] = useState(0);
+  const reload = () => setVersion((value) => value + 1);
+
   useEffect(() => {
     if (!supabase) return;
     let active = true;
@@ -33,7 +36,7 @@ export function useMovements(userId: string) {
       else setMovements(((data ?? []) as MovementRow[]).map(fromRow));
     });
     return () => { active = false; };
-  }, [userId]);
+  }, [userId, version]);
 
   const add = async (input: NewMovement) => {
     if (!supabase) return false;
@@ -58,7 +61,7 @@ export function useMovements(userId: string) {
     setMovements((current) => current.filter((movement) => movement.id !== item.id));
   };
 
-  return { movements, error, add, togglePaid, remove };
+  return { movements, error, add, togglePaid, remove, reload };
 }
 
 // "luz", "gas"... sirve para diferenciar dentro de una misma categoría
