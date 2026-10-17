@@ -4,11 +4,21 @@ import { Sheet, Tabs, sheetField as field, sheetLabel as label } from "./ui";
 import { COLORS } from "../lib/categories";
 import { money, monthLabel, parseAmount, shiftMonth } from "../lib/format";
 import { installmentNumber, type CardItem, type CardItemKind, type CreditCard } from "../lib/cards";
-import { PROVIDERS, initials, type Provider } from "../lib/providers";
+import { KIND_LABELS, PROVIDERS, initials, logoUrl, resolveProvider, type Provider } from "../lib/providers";
 
-// Círculo con las iniciales del banco o billetera (no usamos logos de marcas).
-export function ProviderIcon({ name, color, size = 40 }: { name: string; color: string; size?: number }) {
-  return <span className="flex shrink-0 items-center justify-center rounded-2xl font-bold text-white" style={{ backgroundColor: color, width: size, height: size, fontSize: Math.round(size * 0.36) }}>{initials(name)}</span>;
+// Ícono del banco o billetera: se carga desde su web oficial. Mientras carga (o si no hay), se ven las iniciales.
+export function ProviderIcon({ name, color, size = 40, provider }: { name: string; color: string; size?: number; provider?: string | null }) {
+  const domain = resolveProvider(provider, name)?.domain;
+  const [state, setState] = useState<"loading" | "ok" | "failed">("loading");
+  const showLogo = Boolean(domain) && state === "ok";
+  return (
+    <span className={"relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl font-bold " + (showLogo ? "bg-white ring-1 ring-black/5" : "text-white")} style={{ backgroundColor: showLogo ? undefined : color, width: size, height: size, fontSize: Math.round(size * 0.36) }}>
+      {!showLogo && initials(name)}
+      {domain && state !== "failed" && (
+        <img src={logoUrl(domain)} alt="" loading="lazy" referrerPolicy="no-referrer" onLoad={(event) => setState(event.currentTarget.naturalWidth <= 16 ? "failed" : "ok")} onError={() => setState("failed")} style={{ width: Math.round(size * 0.72), height: Math.round(size * 0.72) }} className={"object-contain " + (showLogo ? "" : "absolute opacity-0")} />
+      )}
+    </span>
+  );
 }
 
 // Confirmación al marcar algo como pagado: se puede ajustar el monto y elegir si se suma a los gastos.
@@ -74,16 +84,16 @@ export function NewCardSheet({ initial, onSave, onClose }: { initial?: Provider;
           <Search size={18} className="text-[var(--muted)]" />
           <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar: Naranja X, Santander…" className="w-full bg-transparent text-base outline-none" />
         </label>
-        {(["billetera", "banco"] as const).map((kind) => {
+        {(["billetera", "banco", "tarjeta"] as const).map((kind) => {
           const group = list.filter((provider) => provider.kind === kind);
           if (group.length === 0) return null;
           return (
             <div key={kind} className="mt-4">
-              <p className={label}>{kind === "billetera" ? "Billeteras" : "Bancos"}</p>
+              <p className={label}>{KIND_LABELS[kind]}</p>
               <div className="grid grid-cols-2 gap-2">
                 {group.map((provider) => (
                   <button key={provider.id} type="button" onClick={() => choose(provider)} className="flex items-center gap-2 rounded-2xl border border-[var(--border)] p-2 text-left hover:bg-[var(--surface-2)]">
-                    <ProviderIcon name={provider.name} color={provider.color} size={34} />
+                    <ProviderIcon name={provider.name} color={provider.color} provider={provider.id} size={34} />
                     <span className="min-w-0 truncate text-sm font-semibold">{provider.name}</span>
                   </button>
                 ))}
@@ -99,7 +109,7 @@ export function NewCardSheet({ initial, onSave, onClose }: { initial?: Provider;
   return (
     <Sheet title="Nueva tarjeta" onClose={onClose}>
       <div className="flex items-center gap-3">
-        <ProviderIcon name={name || "?"} color={color} size={48} />
+        <ProviderIcon key={(picked?.id ?? "") + name} name={name || "?"} color={color} provider={picked?.id} size={48} />
         <input autoFocus={!picked} value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej.: Visa Santander" className={field} />
       </div>
       <label className="mt-4 block"><span className={label}>Día de vencimiento <span className="normal-case tracking-normal">(opcional)</span></span><input value={dueDay} onChange={(event) => setDueDay(event.target.value.replace(/\D/g, "").slice(0, 2))} inputMode="numeric" placeholder="Ej.: 8" className={field} /></label>
@@ -167,7 +177,7 @@ export function CardItemSheet({ draft, cards, month, onSave, onRemove, onNewCard
           <div className="flex flex-wrap gap-2">
             {cards.map((entry) => (
               <button key={entry.id} type="button" onClick={() => setCardId(entry.id)} className={"flex h-11 items-center gap-2 rounded-2xl border px-3 text-sm font-semibold " + (entry.id === cardId ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary-text)]" : "border-[var(--border)]")}>
-                <ProviderIcon name={entry.name} color={entry.color} size={24} />{entry.name}
+                <ProviderIcon name={entry.name} color={entry.color} provider={entry.provider} size={24} />{entry.name}
               </button>
             ))}
             <button type="button" onClick={onNewCard} className="h-11 rounded-2xl border-2 border-dashed border-[var(--border)] px-3 text-sm font-semibold text-[var(--muted)]">+ Nueva tarjeta</button>

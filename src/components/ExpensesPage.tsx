@@ -92,7 +92,7 @@ export default function ExpensesPage() {
                 ))}
                 {pendingCards.map(({ card, summary }) => (
                   <div key={card.id} className="flex items-center gap-3 py-2">
-                    <ProviderIcon name={card.name} color={card.color} size={28} />
+                    <ProviderIcon name={card.name} color={card.color} provider={card.provider} size={28} />
                     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">Tarjeta {card.name}</span><span className="block text-xs text-[var(--muted)]">{summary.statement ? "Resumen del mail" : "Cuotas y débitos"}{card.dueDay ? " · vence el " + card.dueDay : ""}</span></span>
                     <span className="text-sm font-semibold tabular-nums">{money(summary.total)}</span>
                     <button type="button" onClick={() => setPaying({ kind: "tarjeta", card, amount: summary.total })} className="h-8 rounded-full bg-[var(--primary-soft)] px-3 text-xs font-semibold text-[var(--primary-text)]">Pagar</button>

@@ -43,7 +43,7 @@ export default function CardsPage() {
         return (
           <Card key={card.id} className="space-y-3">
             <div className="flex items-center gap-3">
-              <ProviderIcon name={card.name} color={card.color} size={44} />
+              <ProviderIcon name={card.name} color={card.color} provider={card.provider} size={44} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-lg font-bold">{card.name}</p>
                 <p className="text-xs text-[var(--muted)]">{card.dueDay ? "Vence el día " + card.dueDay : "Tarjeta de crédito"}</p>

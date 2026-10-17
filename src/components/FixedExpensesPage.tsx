@@ -147,7 +147,7 @@ export default function FixedExpensesPage() {
           <div key={card.id} className="overflow-hidden rounded-3xl bg-[var(--surface)]">
             <div className="flex items-center gap-3 p-3 sm:p-4">
               <PaidCheck paid={Boolean(summary.payment)} label={summary.payment ? "Desmarcar el pago de " + card.name : "Pagar " + card.name} onClick={() => { if (summary.payment) { if (window.confirm("¿Desmarcar el pago de " + card.name + "? También se quita de tus gastos del mes.")) cardsData.unpayCard(card, month); } else setPaying({ kind: "tarjeta", card, amount: summary.total }); }} />
-              <ProviderIcon name={card.name} color={card.color} />
+              <ProviderIcon name={card.name} color={card.color} provider={card.provider} />
               <div className="min-w-0 flex-1">
                 <p className={"truncate font-semibold " + (summary.payment ? "text-[var(--muted)]" : "")}>Tarjeta {card.name}</p>
                 <p className="text-xs text-[var(--muted)]">{summary.payment ? "Pagada" : summary.statement ? "Según el resumen del mail" : list.length + (list.length === 1 ? " cuota o débito" : " cuotas y débitos")}{card.dueDay ? " · vence el " + card.dueDay : ""}</p>
