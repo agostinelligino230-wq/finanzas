@@ -1,5 +1,7 @@
 export const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
 
+export const usd = (value: number) => "US$ " + value.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
 export const compactMoney = (value: number) => {
   const abs = Math.abs(value);
   if (abs >= 1_000_000) return "$" + (value / 1_000_000).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + "M";
@@ -45,3 +47,6 @@ export const parseAmount = (text: string) => {
   const value = Number(cleaned);
   return Number.isFinite(value) ? value : NaN;
 };
+
+// Cuántos meses hay entre dos meses "AAAA-MM" (b - a)
+export const monthsBetween = (a: string, b: string) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7));

@@ -1,31 +1,197 @@
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
-import { readCache, writeCache } from "../lib/cache";
+import { useEffect, useState } from "react";
+import { CalendarClock, Check, CreditCard as CardIcon, Home, MoreHorizontal, Plus, Trash2, TrendingDown, TrendingUp, Wifi, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
+import { currentMonthISO, money, monthLabel, parseAmount } from "../lib/format";
+import { FIXED_KINDS, FIXED_LABELS, useFixed, type Fixed, type FixedInput, type FixedKind, type FixedRowView } from "../lib/fixed";
+import { cardMonthSummary, installmentNumber, itemsForMonth, lastMonth, useCards, type CreditCard } from "../lib/cards";
 import { useAuth } from "./AuthGate";
-import { Check, ChevronLeft, ChevronRight, CircleDollarSign, Lightbulb, Plus, Receipt, Trash2, Wifi, Home, Zap, CreditCard, MoreHorizontal } from "lucide-react";
+import { Card, ErrorBox, MonthPicker, Sheet, sheetField as field, sheetLabel as label } from "./ui";
+import { CardItemSheet, NewCardSheet, PaySheet, ProviderIcon, type ItemDraft } from "./sheets";
 
-type FixedExpense = { id: string; name: string; amount: number; category: "impuesto" | "suscripcion" | "alquiler" | "servicio" | "otro"; paid: boolean; dueDay: number };
-type FixedRow = { id: string; name: string; amount: number | string; category: string; due_day: number };
-const knownCategories = ["impuesto", "suscripcion", "alquiler", "servicio", "otro"];
-const currentMonth = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 7); };
-const monthLabel = (value: string) => new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(new Date(value + "-01T00:00:00")).replace(/^./, (letter) => letter.toUpperCase());
-const fromRow = (row: FixedRow): FixedExpense => ({ id: row.id, name: row.name, amount: Number(row.amount), category: (knownCategories.includes(row.category) ? row.category : "otro") as FixedExpense["category"], paid: false, dueDay: row.due_day });
-const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
-const icons = { impuesto: Zap, suscripcion: CreditCard, alquiler: Home, servicio: Wifi, otro: MoreHorizontal };
-const labels = { impuesto: "Impuesto", suscripcion: "Suscripción", alquiler: "Alquiler", servicio: "Servicio", otro: "Otro" };
+const ICONS = { impuesto: Zap, suscripcion: CardIcon, alquiler: Home, servicio: Wifi, otro: MoreHorizontal };
+
+function FixedSheet({ item, month, amountNow, onClose, onCreate, onUpdate, onStop, onDelete }: {
+  item?: Fixed; month: string; amountNow: number | null; onClose: () => void;
+  onCreate: (input: FixedInput) => Promise<boolean>;
+  onUpdate: (item: Fixed, input: FixedInput & { scope: "desde" | "solo" }) => Promise<boolean>;
+  onStop: (item: Fixed) => Promise<boolean>;
+  onDelete: (item: Fixed) => Promise<boolean>;
+}) {
+  const [name, setName] = useState(item?.name ?? "");
+  const [amount, setAmount] = useState(amountNow !== null ? String(amountNow).replace(".", ",") : "");
+  const [category, setCategory] = useState<FixedKind>(item?.category ?? "servicio");
+  const [dueDay, setDueDay] = useState(String(item?.dueDay ?? 1));
+  const [scope, setScope] = useState<"desde" | "solo">("desde");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const value = parseAmount(amount);
+  const changedAmount = item && amountNow !== null && value !== amountNow;
+  const monthName = monthLabel(month).toLowerCase();
+
+  const save = async () => {
+    if (!name.trim()) { setError("Escribí qué gasto es, por ejemplo Gimnasio."); return; }
+    if (!(value >= 0) || amount.trim() === "") { setError("Escribí el monto."); return; }
+    const input = { name: name.trim(), amount: value, category, dueDay: Math.min(31, Math.max(1, Number(dueDay) || 1)) };
+    setBusy(true);
+    const ok = item ? await onUpdate(item, { ...input, scope }) : await onCreate(input);
+    setBusy(false);
+    if (ok) onClose(); else setError("No se pudo guardar. Probá de nuevo.");
+  };
+
+  const run = async (action: () => Promise<boolean>) => { setBusy(true); const ok = await action(); setBusy(false); if (ok) onClose(); };
+
+  return (
+    <Sheet title={item ? "Editar gasto fijo" : "Nuevo gasto fijo"} onClose={onClose}>
+      <label className="block"><span className={label}>Qué es</span><input autoFocus={!item} value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej.: Gimnasio, luz, alquiler" className={field} /></label>
+      <label className="mt-4 block"><span className={label}>Monto en {monthName}</span><input value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d.,]/g, ""))} inputMode="decimal" placeholder="$ 0" className={field + " tabular-nums"} /></label>
+      {changedAmount && (
+        <div className="mt-3 space-y-2 rounded-2xl bg-[var(--surface-2)] p-3 text-sm">
+          <p className="font-semibold">¿Desde cuándo cambia el monto?</p>
+          <label className="flex cursor-pointer items-start gap-2"><input type="radio" checked={scope === "desde"} onChange={() => setScope("desde")} className="mt-0.5 h-5 w-5 accent-[var(--primary)]" /><span>Desde {monthName} en adelante <span className="block text-xs text-[var(--muted)]">Los meses anteriores quedan como estaban.</span></span></label>
+          <label className="flex cursor-pointer items-start gap-2"><input type="radio" checked={scope === "solo"} onChange={() => setScope("solo")} className="mt-0.5 h-5 w-5 accent-[var(--primary)]" /><span>Solo en {monthName} <span className="block text-xs text-[var(--muted)]">El mes que viene vuelve al monto anterior.</span></span></label>
+        </div>
+      )}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <label className="block"><span className={label}>Tipo</span><select value={category} onChange={(event) => setCategory(event.target.value as FixedKind)} className={field}>{FIXED_KINDS.map((kind) => <option key={kind} value={kind}>{FIXED_LABELS[kind]}</option>)}</select></label>
+        <label className="block"><span className={label}>Vence el día</span><input value={dueDay} onChange={(event) => setDueDay(event.target.value.replace(/\D/g, "").slice(0, 2))} inputMode="numeric" className={field + " tabular-nums"} /></label>
+      </div>
+      {!item && <p className="mt-3 text-xs text-[var(--muted)]">Empieza a contar desde {monthName}.</p>}
+      {error && <p role="alert" className="mt-4 text-sm text-[var(--expense)]">{error}</p>}
+      <button type="button" disabled={busy} onClick={save} className="mt-5 w-full rounded-2xl bg-[var(--accent)] py-3.5 text-base font-bold text-[var(--accent-text)] disabled:opacity-60">{busy ? "Guardando…" : item ? "Guardar cambios" : "Agregar gasto fijo"}</button>
+      {item && (
+        <div className="mt-3 flex gap-2">
+          <button type="button" disabled={busy} onClick={() => run(() => onStop(item))} className="h-11 flex-1 rounded-2xl border border-[var(--border)] text-sm font-semibold">Ya no lo pago desde {monthName}</button>
+          <button type="button" disabled={busy} onClick={() => { if (window.confirm("¿Borrar " + item.name + " de todos los meses, incluido el historial?")) run(() => onDelete(item)); }} className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--expense)]" aria-label="Borrar del todo"><Trash2 size={18} /></button>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+function PaidCheck({ paid, label: text, onClick }: { paid: boolean; label: string; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 " + (paid ? "border-[var(--income)] bg-[var(--income)] text-white" : "border-[var(--border)] text-transparent")} aria-label={text}><Check size={18} /></button>;
+}
+
+type Paying = { kind: "fijo"; row: FixedRowView } | { kind: "tarjeta"; card: CreditCard; amount: number };
 
 export default function FixedExpensesPage() {
-  const { user } = useAuth(); const [month, setMonth] = useState(currentMonth()); const [items, setItems] = useState<FixedExpense[]>(() => readCache<FixedExpense[]>("fixed_expenses", user.id) ?? (readCache<FixedRow[]>("raw:fixed_expenses", user.id) ?? []).map(fromRow)); const [paidIds, setPaidIds] = useState<string[]>(() => readCache<string[]>("payments:" + currentMonth(), user.id) ?? []); useEffect(() => { writeCache("fixed_expenses", user.id, items); }, [items, user.id]); const [error, setError] = useState("");
-useEffect(() => { if (!supabase) return; let active = true; supabase.from("fixed_expenses").select("*").order("created_at", { ascending: false }).then(({ data, error: loadError }) => { if (!active) return; if (loadError) setError("No se pudieron cargar los gastos fijos."); else setItems(((data ?? []) as FixedRow[]).map(fromRow)); }); return () => { active = false; }; }, [user.id]);
-useEffect(() => { const cachedIds = readCache<string[]>("payments:" + month, user.id); setPaidIds(cachedIds ?? []); if (!supabase) return; let active = true; supabase.from("fixed_expense_payments").select("fixed_expense_id").eq("month", month).then(({ data, error: loadError }) => { if (!active) return; if (loadError) setError("No se pudieron cargar los pagos del mes."); else { const ids = ((data ?? []) as { fixed_expense_id: string }[]).map((row) => row.fixed_expense_id); writeCache("payments:" + month, user.id, ids); setPaidIds(ids); } }); return () => { active = false; }; }, [user.id, month]);
-const monthItems = useMemo(() => items.map((item) => ({ ...item, paid: paidIds.includes(item.id) })), [items, paidIds]);
-const shiftMonth = (offset: number) => { const dateValue = new Date(month + "-01T00:00:00"); dateValue.setMonth(dateValue.getMonth() + offset); setMonth(dateValue.getFullYear() + "-" + String(dateValue.getMonth() + 1).padStart(2, "0")); };
-  const [name, setName] = useState(""); const [amount, setAmount] = useState(""); const [category, setCategory] = useState<FixedExpense["category"]>("servicio"); const [dueDay, setDueDay] = useState("1");
-  const total = useMemo(() => items.reduce((sum, item) => sum + item.amount, 0), [items]);
-  const paid = useMemo(() => monthItems.filter((item) => item.paid).reduce((sum, item) => sum + item.amount, 0), [monthItems]);
-  const add = async () => { const numeric = Number(amount.replace(/^0+(?=\d)/, "")); if (!name.trim() || !Number.isFinite(numeric) || numeric <= 0 || !supabase) return; const { data, error: saveError } = await supabase.from("fixed_expenses").insert({ user_id: user.id, name: name.trim(), amount: numeric, category, due_day: Math.min(31, Math.max(1, Number(dueDay) || 1)) }).select().single(); if (saveError || !data) { setError("No se pudo guardar el gasto fijo. Probá de nuevo."); return; } setError(""); setItems((current) => [fromRow(data as FixedRow), ...current]); setName(""); setAmount(""); setDueDay("1"); };
-const togglePaid = async (item: FixedExpense) => { if (!supabase) return; if (item.paid) { const { error: saveError } = await supabase.from("fixed_expense_payments").delete().eq("fixed_expense_id", item.id).eq("month", month); if (saveError) { setError("No se pudo actualizar el pago."); return; } setPaidIds((current) => { const next = current.filter((id) => id !== item.id); writeCache("payments:" + month, user.id, next); return next; }); } else { const { error: saveError } = await supabase.from("fixed_expense_payments").insert({ user_id: user.id, fixed_expense_id: item.id, month }); if (saveError) { setError("No se pudo actualizar el pago."); return; } setPaidIds((current) => { const next = [...current, item.id]; writeCache("payments:" + month, user.id, next); return next; }); } setError(""); };
-const remove = async (item: FixedExpense) => { if (!supabase) return; const { error: saveError } = await supabase.from("fixed_expenses").delete().eq("id", item.id); if (saveError) { setError("No se pudo eliminar el gasto fijo."); return; } setItems((current) => current.filter((entry) => entry.id !== item.id)); };
-  return <div className="mx-auto max-w-6xl space-y-7"><section><p className="text-sm font-medium text-[var(--primary-text)]">Planificación mensual</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Gastos fijos</h1><p className="mt-2 max-w-2xl text-base leading-7 text-[var(--muted)]">Cargá alquiler, impuestos, luz, gas, internet y suscripciones. Después marcá cada obligación cuando la pagues.</p></section><div className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 sm:max-w-sm"><button type="button" className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted)] hover:bg-[var(--surface-2)]" onClick={() => shiftMonth(-1)} aria-label="Mes anterior"><ChevronLeft size={19} /></button><span className="min-w-36 text-center text-base font-semibold">{monthLabel(month)}</span><button type="button" className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted)] hover:bg-[var(--surface-2)]" onClick={() => shiftMonth(1)} aria-label="Mes siguiente"><ChevronRight size={19} /></button></div>{error && <p role="alert" className="rounded-2xl border border-[var(--border)] bg-[var(--expense-soft)] px-4 py-3 text-sm text-[var(--expense)]">{error}</p>}<section className="grid gap-4 sm:grid-cols-3"><Summary label="Total previsto" value={money(total)} icon={<Receipt size={20} />} /><Summary label="Ya pagado" value={money(paid)} icon={<Check size={20} />} /><Summary label="Pendiente" value={money(total - paid)} icon={<CircleDollarSign size={20} />} /></section><section className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><Plus size={20} /></div><div><h2 className="text-lg font-semibold">Agregar gasto fijo</h2><p className="text-sm text-[var(--muted)]">El monto queda como referencia mensual.</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label><span className="mb-1 block text-sm font-medium">Descripción</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej.: Luz, gas o Netflix" className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-base" /></label><label><span className="mb-1 block text-sm font-medium">Monto mensual</span><input value={amount} onChange={(event) => setAmount(event.target.value.replace(/^0+(?=\d)/, ""))} type="number" min="0" placeholder="$ 0" className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-base" /></label><label><span className="mb-1 block text-sm font-medium">Tipo</span><select value={category} onChange={(event) => setCategory(event.target.value as FixedExpense["category"])} className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-base"><option value="impuesto">Impuesto</option><option value="suscripcion">Suscripción</option><option value="alquiler">Alquiler</option><option value="servicio">Servicio</option><option value="otro">Otro</option></select></label><label><span className="mb-1 block text-sm font-medium">Día de vencimiento</span><input value={dueDay} onChange={(event) => setDueDay(event.target.value.replace(/\D/g, ""))} type="number" min="1" max="31" placeholder="1" className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-base" /></label></div><button type="button" onClick={add} className="mt-4 inline-flex h-11 items-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-base font-semibold text-white hover:bg-[var(--primary-strong)]"><Plus size={18} />Agregar gasto fijo</button></section><section className="space-y-3"><h2 className="text-xl font-semibold">Tus gastos fijos</h2>{items.length === 0 ? <div className="rounded-3xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-10 text-center"><Lightbulb className="mx-auto text-[var(--muted)]" size={32} /><p className="mt-3 text-base">Todavía no cargaste gastos fijos.</p><p className="mt-1 text-sm text-[var(--muted)]">Agregá el primero para empezar a planificar tu mes.</p></div> : monthItems.map((item) => { const Icon = icons[item.category]; return <article key={item.id} className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"><button type="button" onClick={() => togglePaid(item)} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${item.paid ? "bg-[#dbe9df] text-[#3d7651]" : "bg-[var(--surface-2)] text-[var(--muted)]"}`} aria-label={item.paid ? `Marcar ${item.name} como pendiente` : `Marcar ${item.name} como pagado`}>{item.paid ? <Check size={20} /> : <span className="h-4 w-4 rounded-full border-2 border-current" />}</button><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-soft)] text-[var(--primary)]"><Icon size={19} /></div><div className="min-w-0 flex-1"><p className={`truncate text-base font-semibold ${item.paid ? "text-[var(--muted)] line-through" : ""}`}>{item.name}</p><p className="mt-1 text-sm text-[var(--muted)]">{labels[item.category]} · vence el día {item.dueDay}</p></div><p className="shrink-0 text-base font-semibold tabular-nums">{money(item.amount)}</p><button type="button" onClick={() => remove(item)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--muted)] hover:bg-[#f0dfe0] hover:text-[#9a626d]" aria-label={`Eliminar ${item.name}`}><Trash2 size={18} /></button></article>; })}</section></div>;
+  const { user } = useAuth();
+  const [month, setMonth] = useState(currentMonthISO());
+  const fixed = useFixed(user.id, month);
+  const cardsData = useCards(user.id);
+  const { cards, items, statements, payments } = cardsData;
+  const [editing, setEditing] = useState<{ item?: Fixed } | null>(null);
+  const [cardDraft, setCardDraft] = useState<ItemDraft | null>(null);
+  const [newCard, setNewCard] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [paying, setPaying] = useState<Paying | null>(null);
+
+  useEffect(() => { setEditing(null); setCardDraft(null); setPaying(null); }, [month]);
+
+  const cardRows = cards.map((card) => ({ card, summary: cardMonthSummary(items, statements, card.id, month, payments), list: itemsForMonth(items, card.id, month).sort((a, b) => b.amount - a.amount) })).filter((entry) => entry.summary.total > 0 || entry.list.length > 0);
+  const fixedTotal = fixed.rows.reduce((sum, row) => sum + row.amount, 0);
+  const cardsTotal = cardRows.reduce((sum, entry) => sum + entry.summary.total, 0);
+  const paidTotal = fixed.rows.filter((row) => row.paid).reduce((sum, row) => sum + row.amount, 0) + cardRows.filter((entry) => entry.summary.payment).reduce((sum, entry) => sum + entry.summary.total, 0);
+  const total = fixedTotal + cardsTotal;
+  const editingRow = editing?.item ? fixed.rows.find((row) => row.item.id === editing.item!.id) : null;
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4">
+      <ErrorBox message={fixed.error || cardsData.error} />
+      <MonthPicker month={month} onChange={setMonth} />
+
+      <section className="rounded-[28px] bg-[var(--hero)] p-5 text-[var(--hero-text)]">
+        <p className="text-sm opacity-80">Fijos y tarjetas de {monthLabel(month).toLowerCase()}</p>
+        <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums">{money(total)}</p>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs opacity-80">Ya pagado</p><p className="mt-1 text-lg font-bold tabular-nums">{money(paidTotal)}</p></div>
+          <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs opacity-80">Falta pagar</p><p className="mt-1 text-lg font-bold tabular-nums">{money(total - paidTotal)}</p></div>
+        </div>
+        <p className="mt-3 text-xs opacity-75">Al marcar algo como pagado se suma a tus gastos del mes en Inicio.</p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="flex items-center justify-between px-2 text-sm font-semibold text-[var(--muted)]"><span className="flex items-center gap-2"><CalendarClock size={16} />Gastos fijos</span><span className="tabular-nums">{money(fixedTotal)}</span></h2>
+        {fixed.rows.length === 0 ? (
+          <Card className="py-6 text-center text-sm text-[var(--muted)]">No hay gastos fijos en {monthLabel(month).toLowerCase()}. Agregá alquiler, luz o gimnasio con el botón +.</Card>
+        ) : (
+          <div className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--surface)]">
+            {fixed.rows.map((row) => {
+              const Icon = ICONS[row.item.category];
+              return (
+                <div key={row.item.id} className="flex items-center gap-3 p-3 sm:p-4">
+                  <PaidCheck paid={row.paid} label={row.paid ? "Marcar " + row.item.name + " como pendiente" : "Pagar " + row.item.name} onClick={() => { if (row.paid) { if (window.confirm("¿Desmarcar " + row.item.name + "? Si lo sumaste a tus gastos, también se quita.")) fixed.unpay(row); } else setPaying({ kind: "fijo", row }); }} />
+                  <button type="button" onClick={() => setEditing({ item: row.item })} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><Icon size={19} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className={"block truncate font-semibold " + (row.paid ? "text-[var(--muted)]" : "")}>{row.item.name}</span>
+                      <span className="block text-xs text-[var(--muted)]">{FIXED_LABELS[row.item.category]} · vence el {row.item.dueDay}{row.paid && " · pagado"}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block font-semibold tabular-nums">{money(row.amount)}</span>
+                      {row.previous !== null && <span className="flex items-center justify-end gap-1 text-xs text-[var(--muted)]">{row.amount > row.previous ? <TrendingUp size={12} /> : <TrendingDown size={12} />}antes {money(row.previous)}</span>}
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="flex items-center justify-between px-2 text-sm font-semibold text-[var(--muted)]"><span className="flex items-center gap-2"><CardIcon size={16} />De tarjeta</span><span className="tabular-nums">{money(cardsTotal)}</span></h2>
+        {cardRows.length === 0 ? (
+          <Card className="py-6 text-center text-sm text-[var(--muted)]">No hay cuotas ni débitos de tarjeta en {monthLabel(month).toLowerCase()}.</Card>
+        ) : cardRows.map(({ card, summary, list }) => (
+          <div key={card.id} className="overflow-hidden rounded-3xl bg-[var(--surface)]">
+            <div className="flex items-center gap-3 p-3 sm:p-4">
+              <PaidCheck paid={Boolean(summary.payment)} label={summary.payment ? "Desmarcar el pago de " + card.name : "Pagar " + card.name} onClick={() => { if (summary.payment) { if (window.confirm("¿Desmarcar el pago de " + card.name + "? También se quita de tus gastos del mes.")) cardsData.unpayCard(card, month); } else setPaying({ kind: "tarjeta", card, amount: summary.total }); }} />
+              <ProviderIcon name={card.name} color={card.color} provider={card.provider} />
+              <div className="min-w-0 flex-1">
+                <p className={"truncate font-semibold " + (summary.payment ? "text-[var(--muted)]" : "")}>Tarjeta {card.name}</p>
+                <p className="text-xs text-[var(--muted)]">{summary.payment ? "Pagada" : summary.statement ? "Según el resumen del mail" : list.length + (list.length === 1 ? " cuota o débito" : " cuotas y débitos")}{card.dueDay ? " · vence el " + card.dueDay : ""}</p>
+              </div>
+              <span className="shrink-0 font-bold tabular-nums">{money(summary.total)}</span>
+            </div>
+            {list.length > 0 && (
+              <div className="divide-y divide-[var(--border)] border-t border-[var(--border)] pl-[60px] pr-3 sm:pr-4">
+                {list.map((item) => {
+                  const n = installmentNumber(item, month) ?? 1;
+                  const last = lastMonth(item);
+                  return (
+                    <button key={item.id} type="button" onClick={() => setCardDraft({ card, item })} className="flex w-full items-center gap-3 py-2.5 text-left">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{item.description}</span>
+                        <span className="block text-xs text-[var(--muted)]">{item.kind === "cuotas" ? "Cuota " + n + " de " + item.installments + (n === item.installments ? " · última" : last ? " · termina en " + monthLabel(last).toLowerCase() : "") : "Débito fijo"}</span>
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">{money(item.amount)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+        <Link to="/tarjetas" className="block px-2 text-sm font-semibold text-[var(--primary-text)]">Ver tarjetas y resúmenes →</Link>
+      </section>
+
+      <button type="button" onClick={() => setChoosing(true)} className="fixed bottom-24 right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-text)] shadow-xl transition hover:scale-105 lg:bottom-8 lg:right-8" aria-label="Agregar"><Plus size={30} strokeWidth={2.5} /></button>
+
+      {choosing && (
+        <Sheet title="¿Qué querés agregar?" onClose={() => setChoosing(false)}>
+          <div className="space-y-2">
+            <button type="button" onClick={() => { setChoosing(false); setEditing({}); }} className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)]"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><CalendarClock size={20} /></span><span><span className="block font-semibold">Gasto fijo</span><span className="text-sm text-[var(--muted)]">Alquiler, luz, gimnasio, internet…</span></span></button>
+            <button type="button" onClick={() => { setChoosing(false); if (cards.length === 0) setNewCard(true); else setCardDraft({}); }} className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)]"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary-text)]"><CardIcon size={20} /></span><span><span className="block font-semibold">Cuota o débito de tarjeta</span><span className="text-sm text-[var(--muted)]">Ventilador en 12 cuotas, Spotify en la tarjeta…</span></span></button>
+          </div>
+        </Sheet>
+      )}
+
+      {editing && <FixedSheet key={(editing.item?.id ?? "new") + month} item={editing.item} month={month} amountNow={editingRow ? editingRow.amount : null} onClose={() => setEditing(null)} onCreate={fixed.create} onUpdate={fixed.update} onStop={fixed.stop} onDelete={fixed.remove} />}
+      {cardDraft && <CardItemSheet key={(cardDraft.item?.id ?? "new") + month} draft={cardDraft} cards={cards} month={month} onSave={cardsData.saveItem} onRemove={cardsData.removeItem} onNewCard={() => { setCardDraft(null); setNewCard(true); }} onClose={() => setCardDraft(null)} />}
+      {newCard && <NewCardSheet onSave={async (input) => { const created = await cardsData.addCard(input); if (created) setTimeout(() => setCardDraft({ card: created }), 0); return created; }} onClose={() => setNewCard(false)} />}
+      {paying?.kind === "fijo" && <PaySheet title={paying.row.item.name} month={month} suggested={paying.row.amount} onConfirm={(amount, add) => fixed.pay(paying.row, amount, add)} onClose={() => setPaying(null)} />}
+      {paying?.kind === "tarjeta" && <PaySheet title={"tarjeta " + paying.card.name} detail={"Resumen de " + monthLabel(month).toLowerCase()} month={month} suggested={paying.amount} onConfirm={(amount, add) => cardsData.payCard(paying.card, month, amount, add)} onClose={() => setPaying(null)} />}
+    </div>
+  );
 }
-function Summary({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) { return <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5"><div className="flex items-center gap-2 text-[var(--primary)]"><span>{icon}</span><p className="text-sm text-[var(--muted)]">{label}</p></div><p className="mt-2 text-2xl font-bold tabular-nums">{value}</p></div>; }

@@ -7,6 +7,8 @@ import ChartsPage from "./components/ChartsPage";
 import SavingsPage from "./components/SavingsPage";
 import SuggestionsPage from "./components/SuggestionsPage";
 import FixedExpensesPage from "./components/FixedExpensesPage";
+import CardsPage from "./components/CardsPage";
+import ConnectPage from "./components/ConnectPage";
 
 export default function App() {
   return (
@@ -18,6 +20,9 @@ export default function App() {
           <Route path="movimientos" element={<TransactionsPage />} />
           <Route path="graficos" element={<ChartsPage />} />
           <Route path="gastos-fijos" element={<FixedExpensesPage />} />
+          <Route path="tarjetas" element={<CardsPage />} />
+          <Route path="conectar" element={<ConnectPage />} />
+          <Route path="conectar-uala" element={<ConnectPage />} />
           <Route path="ahorro" element={<SavingsPage />} />
           <Route path="sugerencias" element={<SuggestionsPage />} />
         </Route>

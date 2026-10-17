@@ -3,11 +3,18 @@ import { supabase } from "./supabase";
 import { readCache, writeCache } from "./cache";
 
 export type MovementType = "gasto" | "ingreso";
-export type Movement = { id: string; description: string; amount: number; category: string; date: string; createdAt: string; type: MovementType; paid: boolean };
-export type NewMovement = { description: string; amount: number; category: string; date: string; type: MovementType; paid: boolean };
-type MovementRow = { id: string; description: string; amount: number | string; category: string; movement_type: MovementType; movement_date: string; paid: boolean; created_at: string };
+export type Currency = "ARS" | "USD";
+// "amount" siempre está en pesos. Si se cargó en dólares, "original" y "rate" guardan el monto en US$ y la cotización usada.
+export type Movement = { id: string; description: string; amount: number; category: string; date: string; createdAt: string; type: MovementType; paid: boolean; currency: Currency; original: number | null; rate: number | null; source: string | null };
+export type NewMovement = { description: string; amount: number; category: string; date: string; type: MovementType; paid: boolean; currency?: Currency; original?: number | null; rate?: number | null };
+type MovementRow = { id: string; description: string; amount: number | string; category: string; movement_type: MovementType; movement_date: string; paid: boolean; created_at: string; currency?: string | null; original_amount?: number | string | null; exchange_rate?: number | string | null; source?: string | null };
 
-export const fromRow = (row: MovementRow): Movement => ({ id: row.id, description: row.description, amount: Number(row.amount), category: row.category, date: row.movement_date, createdAt: row.created_at, type: row.movement_type, paid: row.paid });
+const numberOrNull = (value: number | string | null | undefined) => (value === null || value === undefined || value === "" ? null : Number(value));
+
+export const fromRow = (row: MovementRow): Movement => ({
+  id: row.id, description: row.description, amount: Number(row.amount), category: row.category, date: row.movement_date, createdAt: row.created_at, type: row.movement_type, paid: row.paid,
+  currency: row.currency === "USD" ? "USD" : "ARS", original: numberOrNull(row.original_amount), rate: numberOrNull(row.exchange_rate), source: row.source ?? null,
+});
 
 const sortMovements = (list: Movement[]) => [...list].sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date)));
 
@@ -16,6 +23,9 @@ export function useMovements(userId: string) {
   const [error, setError] = useState("");
 
   useEffect(() => { writeCache("movements", userId, movements); }, [movements, userId]);
+
+  const [version, setVersion] = useState(0);
+  const reload = () => setVersion((value) => value + 1);
 
   useEffect(() => {
     if (!supabase) return;
@@ -26,11 +36,11 @@ export function useMovements(userId: string) {
       else setMovements(((data ?? []) as MovementRow[]).map(fromRow));
     });
     return () => { active = false; };
-  }, [userId]);
+  }, [userId, version]);
 
   const add = async (input: NewMovement) => {
     if (!supabase) return false;
-    const { data, error: saveError } = await supabase.from("movements").insert({ user_id: userId, description: input.description, amount: input.amount, category: input.category, movement_type: input.type, movement_date: input.date, paid: input.paid }).select().single();
+    const { data, error: saveError } = await supabase.from("movements").insert({ user_id: userId, description: input.description, amount: input.amount, category: input.category, movement_type: input.type, movement_date: input.date, paid: input.paid, ...(input.currency === "USD" ? { currency: "USD", original_amount: input.original, exchange_rate: input.rate } : {}) }).select().single();
     if (saveError || !data) { setError("No se pudo guardar. Probá de nuevo."); return false; }
     setError("");
     setMovements((current) => sortMovements([fromRow(data as MovementRow), ...current]));
@@ -51,7 +61,7 @@ export function useMovements(userId: string) {
     setMovements((current) => current.filter((movement) => movement.id !== item.id));
   };
 
-  return { movements, error, add, togglePaid, remove };
+  return { movements, error, add, togglePaid, remove, reload };
 }
 
 // "luz", "gas"... sirve para diferenciar dentro de una misma categoría
