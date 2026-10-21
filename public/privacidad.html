@@ -30,20 +30,32 @@
     <h2>Qué datos guardamos</h2>
     <ul>
       <li>Tu email (y tu nombre, si ingresás con Google), para identificar tu cuenta.</li>
-      <li>Los movimientos, categorías, gastos fijos y metas de ahorro que cargás vos.</li>
+      <li>Los movimientos, categorías, gastos fijos, tarjetas y metas de ahorro que cargás vos.</li>
+      <li>Si conectás tu Gmail: los movimientos que sacamos de los avisos de tus bancos y billeteras, y el texto de esos avisos durante 30 días (ver abajo).</li>
     </ul>
 
     <h2>Para qué los usamos</h2>
     <p>Solo para que puedas usar la app: ver tus movimientos, tus gráficos y tu historial mes a mes. No vendemos ni compartimos tus datos con nadie, y no los usamos para publicidad.</p>
 
     <h2>Dónde se guardan</h2>
-    <p>Los datos se guardan en Supabase, con acceso restringido: cada usuario solo puede ver y modificar sus propios datos. La app se publica en Vercel.</p>
+    <p>Los datos se guardan en Supabase, con acceso restringido: cada usuario solo puede ver y modificar sus propios datos. La web se publica en Vercel. En la app del celular, tu sesión queda guardada cifrada en el teléfono.</p>
 
     <h2>Ingreso con Google</h2>
-    <p>Si entrás con Google, solo recibimos tu email, tu nombre y tu foto de perfil. No accedemos a tu correo, tus archivos ni ningún otro dato de tu cuenta de Google.</p>
+    <p>Si entrás con Google, solo recibimos tu email, tu nombre y tu foto de perfil. Eso no le da a la app acceso a tu correo: para eso está el botón «Conectar Gmail», que es aparte y opcional.</p>
+
+    <h2>Conexión con Gmail (opcional)</h2>
+    <ul>
+      <li>Pedimos permiso de <strong>solo lectura</strong>: nunca enviamos, borramos ni modificamos tus mails.</li>
+      <li>Cuando llega un mail, Gmail nos avisa al instante. Miramos solo el remitente y el asunto para saber si es de un banco o billetera que elegiste. De los mails que no son de un banco no leemos el contenido ni guardamos nada.</li>
+      <li>De los avisos de tus bancos sacamos el monto, el tipo de movimiento y el detalle, y comprobamos con la firma del mail (DKIM) que lo mandó el banco de verdad.</li>
+      <li>El texto completo de cada aviso se guarda <strong>30 días</strong> para poder corregir errores de lectura, y después se borra solo. Lo que sacamos del aviso (el movimiento) queda.</li>
+      <li>También buscamos los resúmenes de tarjeta en PDF y los analizamos solo si nos decís que sí. Si guardás la clave del PDF, se guarda cifrada.</li>
+      <li>Podés desconectar Gmail cuando quieras desde «Conectar cuentas»: cortamos el aviso, le devolvemos el permiso a Google y borramos la conexión.</li>
+      <li>El uso que hace Finanzas Personales de la información recibida de las APIs de Google cumple con la <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de datos del usuario de los servicios de API de Google</a>, incluidos los requisitos de uso limitado.</li>
+    </ul>
 
     <h2>Borrar tu cuenta</h2>
-    <p>Podés pedir que borremos tu cuenta y todos tus datos escribiendo a <a href="mailto:agostinelligino230@gmail.com">agostinelligino230@gmail.com</a>.</p>
+    <p>Podés pedir que borremos tu cuenta y todos tus datos (también los avisos guardados y la conexión con Gmail) escribiendo a <a href="mailto:agostinelligino230@gmail.com">agostinelligino230@gmail.com</a>.</p>
 
     <p style="margin-top:28px"><a href="/">← Volver a la app</a></p>
   </div>

@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Finanzas Personales",
+    "slug": "finanzas-personales",
+    "scheme": "finanzas",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#f4f2f7",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ar.finanzaspersonales.app",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "ar.finanzaspersonales.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#3D8C8A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
+          "backgroundColor": "#f4f2f7",
+          "dark": {
+            "backgroundColor": "#111013"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
