@@ -24,11 +24,11 @@ export function ReviewCard({ items, onConfirm, onRemove }: { items: Movement[]; 
               <div key={item.id} className="flex items-center gap-2 py-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{item.description}</p>
-                  <p className="truncate text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{originLabel(item) && " · " + originLabel(item)}</p>
+                  <p className="text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{originLabel(item) && " · " + originLabel(item)}</p>
                 </div>
                 <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: item.type === "ingreso" ? "var(--income)" : undefined }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</span>
-                <button type="button" onClick={() => onConfirm(item)} className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-[var(--primary-soft)] px-3 text-xs font-semibold text-[var(--primary-text)]" aria-label={"Confirmar " + item.description}><Check size={15} />Es mío</button>
-                <button type="button" onClick={() => { if (window.confirm("¿Borrar este movimiento? No era tuyo o está mal leído.")) onRemove(item); }} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--expense-soft)] hover:text-[var(--expense)]" aria-label={"Borrar " + item.description}><Trash2 size={16} /></button>
+                <button type="button" onClick={() => onConfirm(item)} className="flex h-11 shrink-0 items-center gap-1 rounded-full bg-[var(--primary-soft)] px-4 text-sm font-semibold text-[var(--primary-text)]" aria-label={"Confirmar " + item.description}><Check size={15} />Es mío</button>
+                <button type="button" onClick={() => { if (window.confirm("¿Borrar «" + item.description + "»? Si no era tuyo, no suma en ningún lado.")) onRemove(item); }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--expense-soft)] hover:text-[var(--expense)]" aria-label={"Borrar " + item.description}><Trash2 size={16} /></button>
               </div>
             ))}
           </div>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { currentMonthISO, monthLabel, money, usd } from "../../../../shared/format";
 import { findCategory } from "../../../../shared/categorias";
@@ -13,7 +13,7 @@ import { Fab } from "../../components/Fab";
 import { MovementRow, ReviewList } from "../../components/movements";
 import { PendingPayments } from "../../components/obligations";
 import { StatementSources } from "../../components/statements";
-import { Card, CategoryIcon, ErrorBox, MonthPicker, Screen, Segmented, T, styles } from "../../components/ui";
+import { Card, CategoryIcon, ErrorBox, Loading, MonthPicker, Screen, Segmented, T, styles } from "../../components/ui";
 
 export default function Home() {
   const { session } = useAuth();
@@ -30,6 +30,9 @@ export default function Home() {
   const dollars = totals.items.filter((item) => item.type === "ingreso" && item.currency === "USD");
   const dollarTotal = dollars.reduce((sum, item) => sum + (item.original ?? 0), 0);
 
+  // Sin datos todavía (cargando, o falló la primera carga): nunca $ 0 ni «no hay gastos».
+  const known = data.loaded;
+  const waiting = !known && !data.error;
   const tabItems = totals.items.filter((item) => item.type === tab);
   const tabTotal = tabItems.reduce((sum, item) => sum + item.amount, 0);
   const groups = useMemo(() => {
@@ -43,20 +46,22 @@ export default function Home() {
       <Screen refreshing={data.refreshing} onRefresh={data.reload}>
         <View style={{ backgroundColor: colors.hero, borderRadius: 28, padding: 20, gap: 4 }}>
           <Text style={{ color: colors.heroText, opacity: 0.8, fontSize: 14 }}>Disponible en {monthLabel(month)}</Text>
-          <Text accessibilityRole="header" style={{ color: totals.available < 0 ? "#ffb3c0" : colors.heroText, fontSize: 38, fontWeight: "700", fontVariant: ["tabular-nums"] }}>{money(totals.available)}</Text>
+          {waiting ? (
+            <View style={{ height: 46, justifyContent: "center", alignItems: "flex-start" }} accessibilityLabel="Cargando tu disponible"><ActivityIndicator color={colors.heroText} /></View>
+          ) : !known ? <Text key="sin-datos" accessibilityLabel="Sin datos" style={{ color: colors.heroText, fontSize: 38, fontWeight: "700" }}>—</Text> : <Text key="disponible" accessibilityRole="header" style={{ color: totals.available < 0 ? "#ffb3c0" : colors.heroText, fontSize: 38, fontWeight: "700", fontVariant: ["tabular-nums"] }}>{money(totals.available)}</Text>}
           {dollarTotal > 0 ? <Text style={{ color: colors.heroText, opacity: 0.8, fontSize: 13 }}>Tus ingresos incluyen {usd(dollarTotal)}</Text> : null}
           <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
             {[{ label: "Ingresos", icon: "ArrowDownLeft", value: totals.income }, { label: "Gastos", icon: "ArrowUpRight", value: totals.expense }].map((box) => (
               <View key={box.label} style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 16, padding: 12 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><Icon name={box.icon} size={14} color={colors.heroText} /><Text style={{ color: colors.heroText, opacity: 0.8, fontSize: 12 }}>{box.label}</Text></View>
-                <Text style={{ color: colors.heroText, fontSize: 18, fontWeight: "700", marginTop: 4, fontVariant: ["tabular-nums"] }}>{money(box.value)}</Text>
+                <Text style={{ color: colors.heroText, fontSize: 18, fontWeight: "700", marginTop: 4, fontVariant: ["tabular-nums"] }}>{waiting ? "…" : known ? money(box.value) : "—"}</Text>
               </View>
             ))}
           </View>
-          <Text style={{ color: colors.heroText, opacity: 0.75, fontSize: 12, marginTop: 12 }}>Saldo acumulado: {money(accumulated)}{totals.pending > 0 ? " · Falta pagar este mes: " + money(totals.pending) : ""}</Text>
+          {!known ? null : <Text style={{ color: colors.heroText, opacity: 0.75, fontSize: 12, marginTop: 12 }}>Saldo acumulado: {money(accumulated)}{totals.pending > 0 ? " · Falta pagar este mes: " + money(totals.pending) : ""}</Text>}
         </View>
 
-        <ErrorBox message={data.error} />
+        <ErrorBox message={data.error} onRetry={data.reload} />
         <ReviewList items={data.toReview} onConfirm={data.confirm} onRemove={data.remove} />
         <StatementSources userId={userId} onlyPending />
         <PendingPayments userId={userId} month={month} available={totals.available} />
@@ -64,12 +69,12 @@ export default function Home() {
         <MonthPicker month={month} onChange={(value) => { setMonth(value); setOpen(null); }} />
         <Segmented value={tab} onChange={(value) => { setTab(value); setOpen(null); }} options={[{ value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
 
-        <Card style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
+        {known ? <Card style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
           <T variant="small">{tab === "gasto" ? "Total gastado" : "Total cobrado"}</T>
           <Text style={{ fontSize: 24, fontWeight: "700", color: colors.text, fontVariant: ["tabular-nums"] }}>{money(tabTotal)}</Text>
-        </Card>
+        </Card> : null}
 
-        {groups.length === 0 ? (
+        {waiting ? <Loading label="Cargando tus movimientos…" /> : !known ? null : groups.length === 0 ? (
           <Card style={{ alignItems: "center", paddingVertical: 32, gap: 4 }}>
             <T variant="subtitle">{tab === "gasto" ? "Todavía no hay gastos este mes" : "Todavía no hay ingresos este mes"}</T>
             <T variant="small">Tocá el botón + para cargar el primero.</T>

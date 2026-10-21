@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MOVEMENT_COLUMNS, counts, fromRow, sortMovements, type Movement, type MovementRow, type NewMovement } from "../../../shared/movimientos";
+import { toast } from "../components/Toast";
 import { supabase } from "./supabase";
 
 // Memoria entre pestañas: cada pantalla abre con lo último que se cargó y se actualiza sola.
@@ -21,6 +22,7 @@ export function useMovements(userId: string) {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const all = cache.get(userId) ?? [];
+  const loaded = cache.has(userId);
   const set = (update: (current: Movement[]) => Movement[]) => publish(userId, update(cache.get(userId) ?? []));
 
   useEffect(() => {
@@ -76,11 +78,13 @@ export function useMovements(userId: string) {
     return true;
   };
 
+  // Se ve al instante; si no se guarda, vuelve como estaba y avisa.
   const togglePaid = async (item: Movement) => {
     if (!supabase) return;
+    const flip = (paid: boolean) => set((current) => current.map((entry) => (entry.id === item.id ? { ...entry, paid } : entry)));
+    flip(!item.paid);
     const { error: saveError } = await supabase.from("movements").update({ paid: !item.paid }).eq("id", item.id);
-    if (saveError) { setError("No se pudo actualizar el movimiento."); return; }
-    set((current) => current.map((entry) => (entry.id === item.id ? { ...entry, paid: !entry.paid } : entry)));
+    if (saveError) { flip(item.paid); toast("No se pudo marcar como " + (item.paid ? "pendiente" : "pagado") + ". Revisá tu conexión.", { action: { label: "Reintentar", onPress: () => togglePaid(item) } }); }
   };
 
   // Confirmar un dudoso: desde ahora suma.
@@ -88,16 +92,34 @@ export function useMovements(userId: string) {
     if (!supabase) return;
     const confirmedAt = new Date().toISOString();
     const { error: saveError } = await supabase.from("movements").update({ confirmed_at: confirmedAt }).eq("id", item.id);
-    if (saveError) { setError("No se pudo confirmar el movimiento."); return; }
+    if (saveError) { toast("No se pudo confirmar «" + item.description + "». Revisá tu conexión.", { action: { label: "Reintentar", onPress: () => confirm(item) } }); return; }
     set((current) => current.map((entry) => (entry.id === item.id ? { ...entry, confirmedAt } : entry)));
+    toast("Listo: ya suma a tus " + (item.type === "gasto" ? "gastos." : "ingresos."), { ok: true });
+  };
+
+  // Corregir un movimiento que llegó solo (por ejemplo, la IA leyó mal el monto). Queda confirmado.
+  const update = async (item: Movement, input: NewMovement) => {
+    if (!supabase) return false;
+    const confirmedAt = item.confirmedAt ?? new Date().toISOString();
+    const usd = input.currency === "USD";
+    const { error: saveError } = await supabase.from("movements").update({
+      description: input.description, amount: input.amount, category: input.category, movement_type: input.type, movement_date: input.date, paid: input.paid,
+      currency: usd ? "USD" : "ARS", original_amount: usd ? input.original : null, exchange_rate: usd ? input.rate : null, confirmed_at: confirmedAt,
+    }).eq("id", item.id);
+    if (saveError) return false;
+    set((current) => sortMovements(current.map((entry) => (entry.id === item.id ? {
+      ...entry, description: input.description, amount: input.amount, category: input.category, type: input.type, date: input.date, paid: input.paid,
+      currency: usd ? "USD" : "ARS", original: usd ? input.original ?? null : null, rate: usd ? input.rate ?? null : null, confirmedAt,
+    } : entry))));
+    return true;
   };
 
   const remove = async (item: Movement) => {
     if (!supabase) return;
     const { error: saveError } = await supabase.from("movements").delete().eq("id", item.id);
-    if (saveError) { setError("No se pudo eliminar el movimiento."); return; }
+    if (saveError) { toast("No se pudo borrar «" + item.description + "». Revisá tu conexión.", { action: { label: "Reintentar", onPress: () => remove(item) } }); return; }
     set((current) => current.filter((entry) => entry.id !== item.id));
   };
 
-  return { all, movements, toReview, error, refreshing, add, togglePaid, confirm, remove, reload };
+  return { all, loaded, movements, toReview, error, refreshing, add, update, togglePaid, confirm, remove, reload };
 }

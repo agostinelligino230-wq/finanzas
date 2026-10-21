@@ -7,6 +7,7 @@ import {
 } from "../../../shared/fijos";
 import { addLinkedExpense, removeLinkedExpense } from "./obligations";
 import { createStore } from "./store";
+import { toast } from "../components/Toast";
 import { supabase } from "./supabase";
 
 // Los gastos fijos y sus cambios de precio (por persona) y los pagos de cada mes (por persona y mes).
@@ -49,7 +50,8 @@ export function useFixed(userId: string, month: string) {
 
   const rows: FixedRowView[] = useMemo(() => fixedRowsFor(data.items, payments, data.changes, month), [data, payments, month]);
 
-  const fail = (message: string) => { setError(message); return false; };
+  // Las acciones que fallan avisan arriba de la pantalla (la lista puede estar scrolleada); el error fijo queda para la carga.
+  const fail = (message: string) => { toast(message + " Revisá tu conexión."); return false; };
   const setItems = (update: (items: Fixed[]) => Fixed[]) => base.set(userId, (current) => ({ ...current, items: update(current.items) }));
   const setPayments = (update: (list: FixedPayment[]) => FixedPayment[]) => paid.set(payKey, update);
 

@@ -2,6 +2,7 @@ import { ActivityIndicator, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Toaster } from "../components/Toast";
 import { AuthProvider, useAuth } from "../lib/auth";
 import { useColors } from "../lib/theme";
 
@@ -38,6 +39,7 @@ function Root() {
         <Stack.Screen name="notificaciones" />
         <Stack.Screen name="auth" />
       </Stack>
+      <Toaster />
     </>
   );
 }

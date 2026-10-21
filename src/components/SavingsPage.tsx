@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { readCache, writeCache } from "../lib/cache";
 import { useAuth } from "./AuthGate";
-import { Airplay, Banknote, Laptop, PiggyBank, Plus, Smartphone, Target, Trash2 } from "lucide-react";
+import { Banknote, Laptop, PiggyBank, Plane, Plus, Smartphone, Target, Trash2 } from "lucide-react";
 import { detectGoalIcon as detectIcon, goalFromRow as fromRow, normalizeDigits, type Goal, type GoalRow } from "../../shared/ahorro";
 
 const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
-const iconFor = (icon: Goal["icon"]) => icon === "phone" ? Smartphone : icon === "laptop" ? Laptop : icon === "trip" ? Airplay : PiggyBank;
+const iconFor = (icon: Goal["icon"]) => icon === "phone" ? Smartphone : icon === "laptop" ? Laptop : icon === "trip" ? Plane : PiggyBank;
 
 export default function SavingsPage() {
   const { user } = useAuth(); const [goals, setGoals] = useState<Goal[]>(() => readCache<Goal[]>("savings_goals", user.id) ?? (readCache<GoalRow[]>("raw:savings_goals", user.id) ?? []).map(fromRow)); useEffect(() => { writeCache("savings_goals", user.id, goals); }, [goals, user.id]); const [error, setError] = useState(""); useEffect(() => { if (!supabase) return; let active = true; supabase.from("savings_goals").select("*").order("created_at", { ascending: false }).then(({ data, error: loadError }) => { if (!active) return; if (loadError) setError("No se pudieron cargar las metas."); else setGoals(((data ?? []) as GoalRow[]).map(fromRow)); }); return () => { active = false; }; }, [user.id]); const [name, setName] = useState(""); const [target, setTarget] = useState(""); const [saved, setSaved] = useState(""); const [period, setPeriod] = useState<Goal["period"]>("mensual");

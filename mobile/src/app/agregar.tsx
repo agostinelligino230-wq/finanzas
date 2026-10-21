@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, Text, View } from "react-native";
-import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { Redirect, router, useLocalSearchParams, usePreventRemove } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { daysAgoISO, money, parseAmount, todayISO } from "../../../shared/format";
+import { dayText, daysAgoISO, money, parseAmount, parseDay, todayISO } from "../../../shared/format";
 import { COLORS, ICON_GROUPS } from "../../../shared/categorias";
 import { getDollarQuote, type DollarQuote } from "../../../shared/dollar";
-import type { Currency, MovementType } from "../../../shared/movimientos";
+import type { Currency, Movement, MovementType } from "../../../shared/movimientos";
 import { useAuth } from "../lib/auth";
 import { useCategories } from "../lib/categories";
 import { useMovements } from "../lib/movements";
 import { radius, useColors } from "../lib/theme";
 import { Icon } from "../components/Icon";
-import { Button, CategoryIcon, ErrorBox, Field, IconButton, Segmented, T, styles } from "../components/ui";
+import { toast } from "../components/Toast";
+import { Button, CategoryIcon, ErrorBox, Field, IconButton, Loading, Segmented, T, styles } from "../components/ui";
 
 export default function AddMovementScreen() {
   const { session } = useAuth();
@@ -19,74 +20,122 @@ export default function AddMovementScreen() {
   return <AddMovement userId={session.user.id} />;
 }
 
+// Sin id: movimiento nuevo. Con id: corregir uno que llegó solo (queda confirmado al guardar).
 function AddMovement({ userId }: { userId: string }) {
-  const { tipo } = useLocalSearchParams<{ tipo?: string }>();
+  const { tipo, id } = useLocalSearchParams<{ tipo?: string; id?: string }>();
   const colors = useColors();
-  const { add } = useMovements(userId);
+  const { all, loaded } = useMovements(userId);
+  if (!id) return <MovementForm userId={userId} initialKind={tipo === "ingreso" ? "ingreso" : "gasto"} />;
+  const editing = all.find((item) => item.id === id);
+  if (editing) return <MovementForm key={editing.id} userId={userId} initialKind={editing.type} editing={editing} />;
+  return (
+    <SafeAreaView edges={["top", "bottom"]} style={{ flex: 1, backgroundColor: colors.surface, padding: 16, gap: 16 }}>
+      {loaded ? (
+        <>
+          <T>Ese movimiento ya no está: puede que lo hayas borrado desde otro lado.</T>
+          <Button label="Volver" variant="secondary" onPress={() => router.back()} />
+        </>
+      ) : <Loading label="Buscando el movimiento…" />}
+    </SafeAreaView>
+  );
+}
+
+// "1250.5" → "1250,5" para mostrar en el campo, como se escribe acá.
+const amountText = (value: number | null) => (value === null ? "" : String(value).replace(".", ","));
+const exact = (value: number) => "$ " + value.toLocaleString("es-AR", { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 });
+
+function MovementForm({ userId, initialKind, editing }: { userId: string; initialKind: MovementType; editing?: Movement }) {
+  const colors = useColors();
+  const { add, update } = useMovements(userId);
   const { categories, addCategory } = useCategories(userId);
-  const [kind, setKind] = useState<MovementType>(tipo === "ingreso" ? "ingreso" : "gasto");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("");
-  const [date, setDate] = useState(todayISO());
-  const [description, setDescription] = useState("");
-  const [paid, setPaid] = useState(true);
-  const [currency, setCurrency] = useState<Currency>("ARS");
-  const [rate, setRate] = useState("");
-  const [rateTouched, setRateTouched] = useState(false);
+  const usdEdit = editing?.currency === "USD" && editing.original !== null;
+  const [kind, setKind] = useState<MovementType>(initialKind);
+  const [amount, setAmount] = useState(editing ? amountText(usdEdit ? editing.original : editing.amount) : "");
+  const [category, setCategory] = useState(editing?.category ?? "");
+  const [date, setDate] = useState(dayText(editing?.date ?? todayISO()));
+  const [description, setDescription] = useState(editing?.description ?? "");
+  const [paid, setPaid] = useState(editing?.paid ?? true);
+  const [currency, setCurrency] = useState<Currency>(usdEdit ? "USD" : "ARS");
+  const [rate, setRate] = useState(usdEdit ? amountText(editing.rate) : "");
+  const [rateTouched, setRateTouched] = useState(usdEdit);
   const [quote, setQuote] = useState<DollarQuote | null>(null);
   const [quoteState, setQuoteState] = useState<"idle" | "loading" | "error">("idle");
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [leaving, setLeaving] = useState(false);
 
   // Al elegir dólares, trae la cotización del momento y la propone (se puede cambiar).
   useEffect(() => {
-    if (currency !== "USD" || quote) return;
+    if (currency !== "USD" || quote || rateTouched) return;
     let active = true;
     setQuoteState("loading");
     getDollarQuote().then((result) => { if (!active) return; setQuote(result); setQuoteState(result ? "idle" : "error"); });
     return () => { active = false; };
-  }, [currency, quote]);
+  }, [currency, quote, rateTouched]);
 
   useEffect(() => {
     if (currency !== "USD" || !quote || rateTouched) return;
     setRate(String(Math.round(kind === "ingreso" ? quote.buy : quote.sell)));
   }, [currency, quote, kind, rateTouched]);
 
+  // Si hay algo escrito, cerrar (X, deslizar o el botón atrás de Android) pregunta antes de perderlo.
+  const fields = JSON.stringify([kind, amount, category, date, description, paid, currency, rate]);
+  const [initialFields] = useState(fields);
+  const dirty = editing ? fields !== initialFields : amount.trim() !== "" || description.trim() !== "";
+  const allowLeave = usePreventRemove(dirty && !leaving, ({ repeat }) => {
+    Alert.alert(editing ? "¿Salir sin guardar los cambios?" : kind === "gasto" ? "¿Descartar este gasto?" : "¿Descartar este ingreso?", "Lo que escribiste no se guarda.", [
+      { text: "Seguir acá", style: "cancel" },
+      { text: "Descartar", style: "destructive", onPress: () => { setLeaving(true); repeat(); } },
+    ]);
+  });
+
   const list = categories.filter((item) => item.kind === kind);
   const value = parseAmount(amount);
   const rateValue = parseAmount(rate);
   const pesos = currency === "USD" ? Math.round(value * rateValue * 100) / 100 : value;
+  const day = parseDay(date);
   const quickDates = [{ label: "Hoy", value: todayISO() }, { label: "Ayer", value: daysAgoISO(1) }, { label: "Anteayer", value: daysAgoISO(2) }];
 
   const save = async () => {
     if (!(value > 0)) { setError("Escribí un monto mayor a cero."); return; }
     if (currency === "USD" && !(rateValue > 0)) { setError("Escribí a cuántos pesos está el dólar."); return; }
     if (!category) { setError("Elegí una categoría."); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(new Date(date + "T12:00:00").getTime())) { setError("La fecha va como AAAA-MM-DD (por ejemplo " + todayISO() + ")."); return; }
+    if (!day) { setError("Escribí la fecha como " + dayText(todayISO()) + "."); return; }
     setBusy(true);
-    const ok = await add({ description: description.trim(), amount: pesos, category, date, type: kind, paid: kind === "ingreso" ? true : paid, ...(currency === "USD" ? { currency: "USD" as const, original: value, rate: rateValue } : {}) });
+    const input = { description: description.trim(), amount: pesos, category, date: day, type: kind, paid: kind === "ingreso" ? true : paid, ...(currency === "USD" ? { currency: "USD" as const, original: value, rate: rateValue } : {}) };
+    const ok = editing ? await update(editing, input) : await add(input);
     setBusy(false);
-    if (ok) router.back();
-    else setError("No se pudo guardar. Probá de nuevo.");
+    if (!ok) { setError("No se pudo guardar. Revisá tu conexión y probá de nuevo: lo que escribiste sigue acá."); return; }
+    allowLeave();
+    if (editing) toast("Corregido: ya suma a tus " + (kind === "gasto" ? "gastos." : "ingresos."), { ok: true });
+    router.back();
   };
 
+  const title = editing ? "Revisar movimiento" : kind === "gasto" ? "Nuevo gasto" : "Nuevo ingreso";
   return (
     <SafeAreaView edges={["top", "bottom"]} style={{ flex: 1, backgroundColor: colors.surface }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={[styles.row, { paddingHorizontal: 16, paddingTop: 8 }]}>
-          <T variant="title" style={{ flex: 1 }}>{kind === "gasto" ? "Nuevo gasto" : "Nuevo ingreso"}</T>
+          <T variant="title" style={{ flex: 1 }}>{title}</T>
           <IconButton icon="X" label="Cerrar" onPress={() => router.back()} />
         </View>
         <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-          <Segmented value={kind} onChange={(next) => { setKind(next); setCategory(""); setCreating(false); }} options={[{ value: "gasto", label: "Gasto" }, { value: "ingreso", label: "Ingreso" }]} />
+          {editing?.readByAI ? (
+            <View style={[styles.row, { alignItems: "flex-start", gap: 8, padding: 12, borderRadius: radius.field, backgroundColor: colors.primarySoft }]}>
+              <Icon name="Sparkles" size={16} color={colors.primaryText} />
+              <T style={{ flex: 1, fontSize: 14 }} color={colors.primaryText}>Este aviso lo leyó la IA porque no lo reconocimos. Revisá el monto y el tipo: al guardar queda confirmado.</T>
+            </View>
+          ) : editing ? <T variant="small" style={{ fontSize: 14 }}>Revisá lo que leímos del aviso. Al guardar queda confirmado y suma.</T> : null}
+          <Segmented value={kind} onChange={(next) => { setKind(next); if (!editing) setCategory(""); setCreating(false); }} options={[{ value: "gasto", label: "Gasto" }, { value: "ingreso", label: "Ingreso" }]} />
 
           <View style={{ gap: 6 }}>
             <View style={[styles.row, { justifyContent: "space-between" }]}>
               <T variant="label">Monto</T>
               <Segmented value={currency} onChange={setCurrency} options={[{ value: "ARS", label: "$" }, { value: "USD", label: "US$" }]} />
             </View>
-            <Field value={amount} onChangeText={setAmount} placeholder="0" keyboardType="decimal-pad" autoFocus style={{ fontSize: 28, fontWeight: "700", minHeight: 64 }} accessibilityLabel="Monto" />
+            <Field value={amount} onChangeText={setAmount} placeholder="0" keyboardType="decimal-pad" autoFocus={!editing} style={{ fontSize: 28, fontWeight: "700", minHeight: 64 }} accessibilityLabel={currency === "USD" ? "Monto en dólares" : "Monto en pesos"} />
+            {currency === "ARS" && value > 0 && /[.,]/.test(amount) ? <T variant="small">Se guarda como {exact(value)}</T> : null}
             {currency === "USD" ? (
               <View style={{ gap: 6 }}>
                 <Field label="Cotización (pesos por dólar)" value={rate} onChangeText={(text) => { setRate(text); setRateTouched(true); }} keyboardType="decimal-pad" />
@@ -122,11 +171,11 @@ function AddMovement({ userId }: { userId: string }) {
             <T variant="label">Fecha</T>
             <View style={{ flexDirection: "row", gap: 8 }}>
               {quickDates.map((item) => {
-                const active = date === item.value;
-                return <Pressable key={item.value} accessibilityRole="radio" accessibilityState={{ selected: active }} onPress={() => setDate(item.value)} style={{ flex: 1, minHeight: 44, borderRadius: radius.field, alignItems: "center", justifyContent: "center", backgroundColor: active ? colors.primary : colors.surface2 }}><Text style={{ color: active ? "#ffffff" : colors.text, fontWeight: "600" }}>{item.label}</Text></Pressable>;
+                const active = day === item.value;
+                return <Pressable key={item.value} accessibilityRole="radio" accessibilityState={{ selected: active }} onPress={() => setDate(dayText(item.value))} style={{ flex: 1, minHeight: 44, borderRadius: radius.field, alignItems: "center", justifyContent: "center", backgroundColor: active ? colors.primary : colors.surface2 }}><Text style={{ color: active ? "#ffffff" : colors.text, fontWeight: "600" }}>{item.label}</Text></Pressable>;
               })}
             </View>
-            <Field value={date} onChangeText={setDate} placeholder="AAAA-MM-DD" keyboardType="numbers-and-punctuation" accessibilityLabel="Fecha (AAAA-MM-DD)" />
+            <Field value={date} onChangeText={setDate} placeholder={dayText(todayISO())} keyboardType="numbers-and-punctuation" accessibilityLabel="Fecha (día/mes/año)" />
           </View>
 
           {kind === "gasto" ? (
@@ -137,7 +186,7 @@ function AddMovement({ userId }: { userId: string }) {
           ) : null}
 
           <ErrorBox message={error} />
-          <Button label={busy ? "Guardando…" : "Guardar"} onPress={save} busy={busy} />
+          <Button label={busy ? "Guardando…" : editing ? "Guardar y confirmar" : "Guardar"} onPress={save} busy={busy} />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

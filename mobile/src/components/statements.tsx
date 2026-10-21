@@ -121,7 +121,7 @@ function SourceRow({ source, busy, disabled, onAnalyze, onAuto, onDismiss }: {
           </View>
           <View style={[styles.row, { gap: 8 }]}>
             <View style={{ flex: 1 }}>
-              <Field value={clave} onChangeText={setClave} secureTextEntry keyboardType="number-pad" autoComplete="off" autoCorrect={false} importantForAutofill="no" placeholder="Clave del PDF" accessibilityLabel={"Clave del PDF de " + source.label} returnKeyType="go" onSubmitEditing={open} />
+              <Field value={clave} onChangeText={setClave} secureTextEntry autoCapitalize="none" autoComplete="off" autoCorrect={false} importantForAutofill="no" placeholder="Clave del PDF" accessibilityLabel={"Clave del PDF de " + source.label} returnKeyType="go" onSubmitEditing={open} />
             </View>
             <Button label="Abrir" onPress={open} disabled={disabled || !clave.trim()} />
           </View>

@@ -1,5 +1,5 @@
 import {
-  Airplay, FileText, Info, KeyRound, Pencil, Target, TrendingDown, Undo2,
+  CircleAlert, FileText, Info, KeyRound, Pencil, Target, TrendingDown, Undo2,
   ArrowDownLeft, ArrowUpRight, Baby, Banknote, BatteryCharging, Beer, Bell, BellRing, Bike, BookOpen, Briefcase, Building2, Bus, CalendarClock, Car, ChartColumn, Check,
   ChevronDown, ChevronLeft, ChevronRight, Cigarette, CircleHelp, Coffee, Coins, CreditCard, Dog, Droplets, Dumbbell, Ellipsis, Eye, EyeOff, Film, Flame, Fuel, Gamepad2,
   Gift, GraduationCap, Hammer, HandCoins, HeartPulse, House, Landmark, Laptop, Lightbulb, ListOrdered, LogOut, Mail, Music, Package, Palette, Percent, PiggyBank, Pill,
@@ -9,7 +9,7 @@ import {
 
 // Todos los íconos pasan por acá: los nombres de las categorías son los de la web (lucide), guardados en la base.
 const ICONS: Record<string, LucideIcon> = {
-  Airplay, FileText, Info, KeyRound, Pencil, Target, TrendingDown, Undo2,
+  CircleAlert, FileText, Info, KeyRound, Pencil, Target, TrendingDown, Undo2,
   ArrowDownLeft, ArrowUpRight, Baby, Banknote, BatteryCharging, Beer, Bell, BellRing, Bike, BookOpen, Briefcase, Building2, Bus, CalendarClock, Car, ChartColumn, Check,
   ChevronDown, ChevronLeft, ChevronRight, Cigarette, Coffee, Coins, CreditCard, Dog, Droplets, Dumbbell, Ellipsis, Eye, EyeOff, Film, Flame, Fuel, Gamepad2,
   Gift, GraduationCap, Hammer, HandCoins, HeartPulse, House, Landmark, Laptop, Lightbulb, ListOrdered, LogOut, Mail, Music, Package, Palette, Percent, PiggyBank, Pill,

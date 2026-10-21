@@ -11,7 +11,7 @@ import { radius, useColors } from "../../lib/theme";
 import { Icon } from "../../components/Icon";
 import { Fab } from "../../components/Fab";
 import { MovementRow, ReviewList } from "../../components/movements";
-import { Card, ErrorBox, MonthPicker, Screen, Segmented, T } from "../../components/ui";
+import { Button, Card, ErrorBox, IconButton, Loading, MonthPicker, Screen, Segmented, T } from "../../components/ui";
 
 type Filter = "todos" | "gasto" | "ingreso";
 
@@ -47,22 +47,28 @@ export default function Movements() {
   return (
     <View style={{ flex: 1 }}>
       <Screen title="Movimientos" refreshing={data.refreshing} onRefresh={data.reload}>
-        <ErrorBox message={data.error} />
+        <ErrorBox message={data.error} onRetry={data.reload} />
         <ReviewList items={data.toReview} onConfirm={data.confirm} onRemove={data.remove} />
         <MonthPicker month={month} onChange={setMonth} />
         <Segmented value={filter} onChange={setFilter} options={[{ value: "todos", label: "Todos" }, { value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.surface, borderRadius: radius.field, paddingHorizontal: 16, minHeight: 48 }}>
           <Icon name="Search" size={18} color={colors.muted} />
-          <TextInput value={query} onChangeText={setQuery} placeholder="Buscar por categoría o detalle" placeholderTextColor={colors.muted} accessibilityLabel="Buscar" style={{ flex: 1, fontSize: 16, color: colors.text }} />
+          <TextInput value={query} onChangeText={setQuery} placeholder="Buscar por categoría o detalle" placeholderTextColor={colors.muted} accessibilityLabel="Buscar" returnKeyType="search" style={{ flex: 1, fontSize: 16, color: colors.text, minHeight: 48 }} />
+          {query ? <IconButton icon="X" label="Borrar la búsqueda" onPress={() => setQuery("")} /> : null}
         </View>
-        <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <T variant="small">{visible.length} movimientos</T>
+        {data.loaded ? <Card style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <T variant="small">{visible.length === 1 ? "1 movimiento" : visible.length + " movimientos"}</T>
           <View style={{ flexDirection: "row", gap: 12 }}>
             <Text style={{ color: colors.income, fontWeight: "700", fontVariant: ["tabular-nums"] }}>+{money(income)}</Text>
             <Text style={{ color: colors.expense, fontWeight: "700", fontVariant: ["tabular-nums"] }}>−{money(expense)}</Text>
           </View>
-        </Card>
-        {byDay.length === 0 ? <Card style={{ alignItems: "center", paddingVertical: 32 }}><T variant="small">No hay movimientos para mostrar.</T></Card> : byDay.map(([day, items]) => (
+        </Card> : null}
+        {!data.loaded ? (data.error ? null : <Loading label="Cargando tus movimientos…" />) : byDay.length === 0 ? (
+          <Card style={{ alignItems: "center", paddingVertical: 32, gap: 8 }}>
+            <T variant="subtitle" style={{ textAlign: "center" }}>{query.trim() ? "Nada coincide con «" + query.trim() + "»" : "No hay movimientos en este mes"}</T>
+            {query.trim() ? <Button label="Borrar la búsqueda" variant="ghost" onPress={() => setQuery("")} /> : <T variant="small">Tocá el botón + para cargar uno.</T>}
+          </Card>
+        ) : byDay.map(([day, items]) => (
           <View key={day} style={{ gap: 6 }}>
             <T variant="small" style={{ fontWeight: "600", paddingHorizontal: 8 }}>{dayLabel(day)}</T>
             <Card style={{ paddingVertical: 4 }}>

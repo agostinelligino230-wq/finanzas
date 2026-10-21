@@ -7,9 +7,9 @@ import { useAuth } from "../lib/auth";
 import { useSavings } from "../lib/savings";
 import { radius, useColors } from "../lib/theme";
 import { Icon, type IconName } from "../components/Icon";
-import { Button, Card, ErrorBox, Field, IconButton, Screen, Segmented, T, styles } from "../components/ui";
+import { Button, Card, ErrorBox, Field, IconButton, Loading, Screen, Segmented, T, styles } from "../components/ui";
 
-const ICONS: Record<Goal["icon"], IconName> = { phone: "Smartphone", laptop: "Laptop", trip: "Airplay", piggy: "PiggyBank" };
+const ICONS: Record<Goal["icon"], IconName> = { phone: "Smartphone", laptop: "Laptop", trip: "Plane", piggy: "PiggyBank" };
 const PERIOD_LABELS: Record<GoalPeriod, string> = { mensual: "Mensual", semestral: "Semestral", anual: "Anual" };
 // Solo dígitos y sin ceros adelante, como el campo numérico de la web.
 const digits = (text: string) => normalizeDigits(text.replace(/\D/g, ""));
@@ -29,15 +29,17 @@ function Savings({ userId }: { userId: string }) {
   const [saved, setSavedText] = useState("");
   const [period, setPeriod] = useState<GoalPeriod>("mensual");
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const totalTarget = goals.reduce((sum, goal) => sum + goal.target, 0);
   const totalSaved = goals.reduce((sum, goal) => sum + goal.saved, 0);
   const numericTarget = Number(target);
   const numericSaved = Number(saved) || 0;
-  const valid = Boolean(name.trim()) && numericTarget > 0 && numericSaved >= 0;
 
   const create = async () => {
-    if (!valid) return;
+    if (!name.trim()) { setFormError("Escribí para qué ahorrás, por ejemplo Viaje."); return; }
+    if (!(numericTarget > 0)) { setFormError("Escribí cuánto querés juntar."); return; }
+    setFormError("");
     setBusy(true);
     const ok = await addGoal({ name: name.trim(), target: numericTarget, saved: numericSaved, period });
     setBusy(false);
@@ -67,7 +69,7 @@ function Savings({ userId }: { userId: string }) {
         <T variant="small">Registrá lo que destinás a ahorro y distribuí ese monto entre tus metas.</T>
       </View>
 
-      <ErrorBox message={error} />
+      <ErrorBox message={error} onRetry={reload} />
 
       <Card style={{ gap: 4, paddingVertical: 8 }}>
         {summary.map((item) => (
@@ -94,12 +96,13 @@ function Savings({ userId }: { userId: string }) {
           <T variant="label">Plazo</T>
           <Segmented value={period} onChange={setPeriod} options={GOAL_PERIODS.map((value) => ({ value, label: PERIOD_LABELS[value] }))} />
         </View>
-        <Button label="Crear meta" icon="Plus" onPress={create} busy={busy} disabled={!valid} />
+        <ErrorBox message={formError} />
+        <Button label="Crear meta" icon="Plus" onPress={create} busy={busy} />
       </Card>
 
       <T variant="subtitle" style={{ fontSize: 20, marginTop: 8 }}>Tus metas</T>
       {goals.length === 0 ? (
-        refreshing ? null : (
+        refreshing ? <Loading label="Cargando tus metas…" /> : (
           <Card style={{ alignItems: "center", paddingVertical: 32, gap: 4, borderWidth: 1, borderStyle: "dashed", borderColor: colors.border }}>
             <Icon name="PiggyBank" size={32} color={colors.muted} />
             <T style={{ marginTop: 8 }}>Todavía no tenés metas creadas.</T>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
+import { router } from "expo-router";
 import { dayLabel, money, timeLabel, usd } from "../../../shared/format";
 import { findCategory, type Category } from "../../../shared/categorias";
 import { hasDetail, originLabel, type Movement } from "../../../shared/movimientos";
@@ -16,14 +17,15 @@ export function confirmRemove(item: Movement, onRemove: (item: Movement) => void
 }
 
 // Dónde vino: «Verificado · mail de Mercado Pago», con el escudo si lo avisó el banco.
-export function Origin({ item }: { item: Movement }) {
+// Lo leído por la IA lleva su marca (✦) para que se note que hay que mirarlo.
+export function Origin({ item, lines = 1 }: { item: Movement; lines?: number }) {
   const colors = useColors();
   const label = originLabel(item);
   if (!label) return null;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-      {item.trust === "verified" ? <Icon name="ShieldCheck" size={12} color={colors.income} /> : null}
-      <T variant="small" numberOfLines={1}>{label}</T>
+      {item.trust === "verified" ? <Icon name="ShieldCheck" size={12} color={colors.income} /> : item.readByAI ? <Icon name="Sparkles" size={12} color={colors.primaryText} /> : null}
+      <T variant="small" numberOfLines={lines} style={{ flexShrink: 1 }}>{label}</T>
     </View>
   );
 }
@@ -66,20 +68,24 @@ export function ReviewList({ items, onConfirm, onRemove }: { items: Movement[]; 
       </Pressable>
       {open ? (
         <View style={{ gap: 4 }}>
-          <T variant="small">Llegaron sin un aviso verificado del banco. No suman hasta que los confirmes.</T>
+          <T variant="small">Llegaron sin un aviso verificado del banco. No suman hasta que los confirmes; si algo está mal leído, corregilo.</T>
           {items.map((item) => (
             <View key={item.id} style={{ paddingVertical: 8, gap: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
               <View style={styles.row}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <T numberOfLines={2} style={{ fontWeight: "500" }}>{item.description}</T>
                   <T variant="small">{dayLabel(item.date)} · {timeLabel(item.createdAt)}</T>
-                  <Origin item={item} />
+                  <Origin item={item} lines={2} />
                 </View>
-                <Text style={{ fontSize: 15, fontWeight: "700", color: item.type === "ingreso" ? colors.income : colors.text }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</Text>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"], color: item.type === "ingreso" ? colors.income : colors.text }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</Text>
+                  {item.currency === "USD" && item.original !== null ? <T variant="small">{usd(item.original)}</T> : null}
+                </View>
               </View>
               <View style={[styles.row, { gap: 8 }]}>
-                <Button label="Es mío" icon="Check" variant="soft" onPress={() => onConfirm(item)} style={{ flex: 1 }} accessibilityLabel={"Confirmar " + item.description} />
-                <Button label="Borrar" icon="Trash2" variant="danger" onPress={() => confirmRemove(item, onRemove, "¿Borrar este movimiento? No era tuyo o está mal leído.")} style={{ flex: 1 }} accessibilityLabel={"Borrar " + item.description} />
+                <Button label="Es mío" icon="Check" variant="soft" onPress={() => onConfirm(item)} style={{ flex: 1, paddingHorizontal: 8 }} accessibilityLabel={"Confirmar " + item.description + ", " + money(item.amount)} />
+                <Button label="Corregir" icon="Pencil" variant="secondary" onPress={() => router.push({ pathname: "/agregar", params: { id: item.id } })} style={{ flex: 1, paddingHorizontal: 8 }} accessibilityLabel={"Corregir " + item.description} />
+                <IconButton icon="Trash2" label={"Borrar " + item.description} color={colors.expense} background={colors.expenseSoft} size={48} onPress={() => confirmRemove(item, onRemove, "¿Borrar este movimiento? Si no era tuyo, no suma en ningún lado.")} />
               </View>
             </View>
           ))}

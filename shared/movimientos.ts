@@ -11,16 +11,17 @@ export type Channel = "mail" | "push";
 export type Movement = {
   id: string; description: string; amount: number; category: string; date: string; createdAt: string; type: MovementType; paid: boolean;
   currency: Currency; original: number | null; rate: number | null; source: string | null; trust: Trust; confirmedAt: string | null; channels: Channel[];
+  readByAI: boolean; // Lo leyó la IA de respaldo (ningún lector propio lo reconoció): se avisa siempre.
 };
 export type NewMovement = { description: string; amount: number; category: string; date: string; type: MovementType; paid: boolean; currency?: Currency; original?: number | null; rate?: number | null };
 export type MovementRow = {
   id: string; description: string; amount: number | string; category: string; movement_type: MovementType; movement_date: string; paid: boolean; created_at: string;
   currency?: string | null; original_amount?: number | string | null; exchange_rate?: number | string | null; source?: string | null;
-  trust?: string | null; confirmed_at?: string | null; incoming_notices?: { channel: string }[] | null;
+  trust?: string | null; confirmed_at?: string | null; incoming_notices?: { channel: string; parser?: string | null }[] | null;
 };
 
-// Cada movimiento trae de qué vías llegó (notificación, mail o las dos).
-export const MOVEMENT_COLUMNS = "*, incoming_notices(channel)";
+// Cada movimiento trae de qué vías llegó (notificación, mail o las dos) y quién leyó cada aviso.
+export const MOVEMENT_COLUMNS = "*, incoming_notices(channel, parser)";
 
 const numberOrNull = (value: number | string | null | undefined) => (value === null || value === undefined || value === "" ? null : Number(value));
 const TRUSTS: Trust[] = ["manual", "legacy", "verified", "doubtful"];
@@ -30,6 +31,7 @@ export const fromRow = (row: MovementRow): Movement => ({
   currency: row.currency === "USD" ? "USD" : "ARS", original: numberOrNull(row.original_amount), rate: numberOrNull(row.exchange_rate), source: row.source ?? null,
   trust: TRUSTS.includes(row.trust as Trust) ? (row.trust as Trust) : "manual", confirmedAt: row.confirmed_at ?? null,
   channels: [...new Set((row.incoming_notices ?? []).map((notice) => notice.channel))].filter((channel): channel is Channel => channel === "mail" || channel === "push").sort(),
+  readByAI: (row.incoming_notices ?? []).some((notice) => notice.parser === "ai") && !(row.incoming_notices ?? []).some((notice) => notice.parser === "rule"),
 });
 
 // Lo dudoso no suma (ni al saldo, ni a los gráficos, ni a la descarga) hasta que lo confirmes.
@@ -41,7 +43,7 @@ export function originLabel(item: Movement) {
   if (!provider) return "";
   const via = item.channels.length === 2 ? "notificación y mail" : item.channels[0] === "push" ? "notificación" : item.channels[0] === "mail" ? "mail" : "";
   if (item.trust === "verified") return "Verificado · " + (via ? via + " de " : "") + provider;
-  return via ? via[0].toUpperCase() + via.slice(1) + " de " + provider : "desde " + provider;
+  return (via ? via[0].toUpperCase() + via.slice(1) + " de " + provider : "desde " + provider) + (item.readByAI ? " · leído con IA, revisá el monto" : "");
 }
 
 export const sortMovements = (list: Movement[]) => [...list].sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date)));

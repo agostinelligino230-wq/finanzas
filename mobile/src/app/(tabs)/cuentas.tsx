@@ -8,7 +8,7 @@ import { disponible as lectorDisponible, useLector } from "../../lib/notificacio
 import { useColors } from "../../lib/theme";
 import { Icon } from "../../components/Icon";
 import { StatementSources } from "../../components/statements";
-import { Button, Card, ErrorBox, Notice, Screen, T, styles } from "../../components/ui";
+import { Button, Card, ErrorBox, Loading, Notice, Screen, T, styles } from "../../components/ui";
 
 const RESULTS: Record<ConnectResult, { text: string; ok: boolean }> = {
   ok: { text: "¡Listo! Tu Gmail quedó conectado y ya trajimos tus últimos movimientos.", ok: true },
@@ -55,10 +55,10 @@ export default function Accounts() {
 
   return (
     <Screen title="Cuentas" refreshing={false} onRefresh={gmail.reload}>
-      <ErrorBox message={gmail.error} />
+      <ErrorBox message={gmail.error} onRetry={gmail.reload} />
       {notice ? <Notice message={notice.text} ok={notice.ok} /> : null}
 
-      <Card style={{ gap: 12 }}>
+      {!gmail.loaded ? (gmail.error ? null : <Loading label="Buscando tu conexión con Gmail…" />) : <Card style={{ gap: 12 }}>
         {link ? (
           <>
             <View style={styles.row}>
@@ -91,8 +91,8 @@ export default function Accounts() {
           <Icon name="ShieldCheck" size={16} color={colors.income} />
           <T variant="small" style={{ flex: 1 }}>Solo pedimos permiso para leer: nunca enviamos, borramos ni tocamos tus mails, y solo miramos los avisos de estas cuentas.</T>
         </View>
-        {link ? <Button label="Desconectar Gmail" variant="ghost" onPress={disconnect} /> : null}
-      </Card>
+        {link ? <Button label="Desconectar Gmail" variant="ghost" onPress={disconnect} disabled={gmail.busy} /> : null}
+      </Card>}
 
       {lectorDisponible ? (
         <Card style={{ gap: 10 }}>

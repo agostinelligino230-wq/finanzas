@@ -7,7 +7,7 @@ import { useCategories } from "../../lib/categories";
 import { useMovements } from "../../lib/movements";
 import { useColors } from "../../lib/theme";
 import { CategoryDonut, CategoryList, MonthDetail, MonthlyBars, SeriesLegend, type MonthRow } from "../../components/charts";
-import { Card, ErrorBox, Screen, Segmented, T } from "../../components/ui";
+import { Card, ErrorBox, Loading, Screen, Segmented, T } from "../../components/ui";
 
 type Range = "6" | "12";
 
@@ -45,28 +45,32 @@ export default function Graficos() {
 
   return (
     <Screen title="Gráficos" refreshing={data.refreshing} onRefresh={data.reload}>
-      <ErrorBox message={data.error} />
-      <Segmented value={range} onChange={setRange} options={[{ value: "6", label: "Últimos 6 meses" }, { value: "12", label: "Últimos 12 meses" }]} />
+      <ErrorBox message={data.error} onRetry={data.reload} />
+      {!data.loaded ? (data.error ? null : <Loading label="Cargando tus movimientos…" />) : (
+        <>
+          <Segmented value={range} onChange={setRange} options={[{ value: "6", label: "Últimos 6 meses" }, { value: "12", label: "Últimos 12 meses" }]} />
 
-      <Card style={{ gap: 12 }}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <Text accessibilityRole="header" style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>Mes a mes</Text>
-          <SeriesLegend />
-        </View>
-        <MonthlyBars data={rows} selected={current.month} onSelect={setSelected} />
-        <MonthDetail row={current} />
-        <T variant="small">Tocá un mes en el gráfico para ver el detalle.</T>
-      </Card>
+          <Card style={{ gap: 12 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <Text accessibilityRole="header" style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>Mes a mes</Text>
+              <SeriesLegend />
+            </View>
+            <MonthlyBars data={rows} selected={current.month} onSelect={setSelected} />
+            <MonthDetail row={current} />
+            <T variant="small">Tocá un mes en el gráfico para ver el detalle.</T>
+          </Card>
 
-      <Card style={{ gap: 16 }}>
-        <Text accessibilityRole="header" style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>¿En qué se fue la plata en {monthLabel(current.month).toLowerCase()}?</Text>
-        {breakdown.rows.length === 0 ? <T variant="small" style={{ fontSize: 14 }}>No hay gastos cargados ese mes.</T> : (
-          <>
-            <CategoryDonut rows={breakdown.rows} total={breakdown.total} />
-            <CategoryList rows={breakdown.rows} />
-          </>
-        )}
-      </Card>
+          <Card style={{ gap: 16 }}>
+            <Text accessibilityRole="header" style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>¿En qué se fue la plata en {monthLabel(current.month).toLowerCase()}?</Text>
+            {breakdown.rows.length === 0 ? <T variant="small" style={{ fontSize: 14 }}>No hay gastos cargados ese mes.</T> : (
+              <>
+                <CategoryDonut rows={breakdown.rows} total={breakdown.total} />
+                <CategoryList rows={breakdown.rows} />
+              </>
+            )}
+          </Card>
+        </>
+      )}
     </Screen>
   );
 }

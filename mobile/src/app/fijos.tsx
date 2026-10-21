@@ -64,7 +64,7 @@ function FixedAndCards({ userId }: { userId: string }) {
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={fixed.refreshing || cardsData.refreshing} onRefresh={refresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        <ErrorBox message={fixed.error || cardsData.error} />
+        <ErrorBox message={fixed.error || cardsData.error} onRetry={refresh} />
         <MonthPicker month={month} onChange={setMonth} />
 
         <View style={{ backgroundColor: colors.hero, borderRadius: 28, padding: 20, gap: 4 }}>

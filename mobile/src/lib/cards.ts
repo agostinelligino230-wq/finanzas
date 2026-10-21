@@ -6,6 +6,7 @@ import {
 } from "../../../shared/tarjetas";
 import { addLinkedExpense, removeLinkedExpense } from "./obligations";
 import { createStore } from "./store";
+import { toast } from "../components/Toast";
 import { supabase } from "./supabase";
 
 // Tarjetas, sus cuotas y fijos, los resúmenes que llegaron y lo que se pagó cada mes (lo mismo que en la web).
@@ -37,12 +38,13 @@ export function useCards(userId: string) {
 
   useEffect(() => { reload(); }, [reload]);
 
-  const fail = (message: string) => { setError(message); return false; };
+  // Las acciones que fallan avisan arriba de la pantalla (la lista puede estar scrolleada); el error fijo queda para la carga.
+  const fail = (message: string) => { toast(message + " Revisá tu conexión."); return false; };
 
   const addCard = async (input: { name: string; color: string; dueDay: number | null; provider: string | null }) => {
     if (!supabase) return null;
     const { data, error: saveError } = await supabase.from("credit_cards").insert({ user_id: userId, name: input.name, color: input.color, due_day: input.dueDay, provider: input.provider }).select().single();
-    if (saveError || !data) { fail("No se pudo crear la tarjeta. Probá de nuevo."); return null; }
+    if (saveError || !data) { fail("No se pudo crear la tarjeta."); return null; }
     const created = cardFromRow(data as CardRow);
     setError("");
     set((current) => ({ ...current, cards: [...current.cards, created] }));
@@ -62,7 +64,7 @@ export function useCards(userId: string) {
     const row = cardItemToRow(input);
     const query = input.id ? supabase.from("card_items").update(row).eq("id", input.id).select().single() : supabase.from("card_items").insert({ user_id: userId, ...row }).select().single();
     const { data, error: saveError } = await query;
-    if (saveError || !data) return fail("No se pudo guardar. Probá de nuevo.");
+    if (saveError || !data) return fail("No se pudo guardar.");
     const saved = cardItemFromRow(data as CardItemRow);
     setError("");
     set((current) => ({ ...current, items: input.id ? current.items.map((entry) => (entry.id === saved.id ? saved : entry)) : [...current.items, saved] }));
