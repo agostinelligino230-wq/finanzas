@@ -103,7 +103,8 @@ function bodyText(payload: Part): string {
     .replace(/<br\s*\/?>|<\/(p|div|tr|td|li|h\d)>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;|&zwnj;/g, " ").replace(/&#36;|&dollar;/g, "$").replace(/&amp;/g, "&").replace(/&aacute;/g, "á").replace(/&eacute;/g, "é").replace(/&iacute;/g, "í").replace(/&oacute;/g, "ó").replace(/&uacute;/g, "ú").replace(/&ntilde;/g, "ñ")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16))); // Naranja X manda «ingres&#xF3;»
 }
 
 function findPart(part: Part, mime: string): string | null {
