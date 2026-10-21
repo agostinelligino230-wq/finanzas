@@ -6,3 +6,7 @@ verify_jwt = false
 [functions.gmail-push]
 # Lo llama Google Pub/Sub con su propio token (OIDC): la función verifica firma, audiencia y cuenta de servicio.
 verify_jwt = false
+
+[functions.notificaciones]
+# La llama la app de Android con su propio token de dispositivo (X-Device-Token).
+verify_jwt = false

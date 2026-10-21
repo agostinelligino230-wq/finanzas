@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Lector de notificaciones: Android solo lo conecta si la persona da el acceso en Ajustes. -->
+    <service
+      android:name="ar.finanzaspersonales.lectoravisos.LectorAvisosService"
+      android:label="Finanzas Personales"
+      android:exported="true"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

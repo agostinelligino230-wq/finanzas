@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["ar.finanzaspersonales.lectoravisos.LectorAvisosModule"]
+  }
+}

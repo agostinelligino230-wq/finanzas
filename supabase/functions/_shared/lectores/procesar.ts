@@ -4,6 +4,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { LECTORES_MAIL } from "./mail.ts";
 import { LECTORES_PUSH } from "./push.ts";
 import { leerGenerico } from "./generico.ts";
+import { leerConIA } from "./ia.ts";
 import { entidad, entidadDeMail, entidadDePaquete } from "./entidades.ts";
 import { officialSignature } from "./autenticidad.ts";
 import { day } from "./texto.ts";
@@ -17,6 +18,7 @@ type Parser = "rule" | "generic" | "ai";
 
 const LECTORES = [...LECTORES_MAIL, ...LECTORES_PUSH];
 const TEXTO_MAXIMO = 20000;
+const CON_MONTO = /(?:\$|US\$|USD|U\$S|ARS)\s?\d/i;
 
 export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Contexto): Promise<Resultado> {
   const permitido = (id: string) => !ctx.proveedores || ctx.proveedores.includes(id);
@@ -33,6 +35,11 @@ export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Co
   if (lectura === null && aviso.canal === "push") {
     lectura = leerGenerico(aviso, ent.nombre);
     if (lectura) parser = "generic";
+  }
+  // IA de respaldo (con tope e interruptor): notificaciones que nadie leyó y mails que traen un monto.
+  if (lectura === null && (aviso.canal === "push" || CON_MONTO.test(aviso.titulo + " " + aviso.texto))) {
+    lectura = await leerConIA(admin, aviso, ent.nombre);
+    if (lectura) parser = "ai";
   }
 
   const firma = aviso.canal === "mail" ? officialSignature(aviso.autenticacion, ent.dominios) : null;
