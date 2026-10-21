@@ -26,6 +26,13 @@ function Root() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="agregar" options={{ presentation: "modal" }} />
+        <Stack.Screen name="pagar" options={{ presentation: "modal" }} />
+        <Stack.Screen name="fijo" options={{ presentation: "modal" }} />
+        <Stack.Screen name="tarjeta" options={{ presentation: "modal" }} />
+        <Stack.Screen name="cuota" options={{ presentation: "modal" }} />
+        <Stack.Screen name="fijos" />
+        <Stack.Screen name="ahorro" />
+        <Stack.Screen name="sugerencias" />
         <Stack.Screen name="login" />
         <Stack.Screen name="conectar" />
         <Stack.Screen name="auth" />

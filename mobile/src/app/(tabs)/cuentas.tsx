@@ -6,6 +6,7 @@ import { useAuth } from "../../lib/auth";
 import { isInstant, useGmail, type ConnectResult } from "../../lib/gmail";
 import { useColors } from "../../lib/theme";
 import { Icon } from "../../components/Icon";
+import { StatementSources } from "../../components/statements";
 import { Button, Card, ErrorBox, Notice, Screen, T, styles } from "../../components/ui";
 
 const RESULTS: Record<ConnectResult, { text: string; ok: boolean }> = {
@@ -89,6 +90,7 @@ export default function Accounts() {
         </View>
         {link ? <Button label="Desconectar Gmail" variant="ghost" onPress={disconnect} /> : null}
       </Card>
+      {link ? <StatementSources userId={userId} /> : null}
     </Screen>
   );
 }

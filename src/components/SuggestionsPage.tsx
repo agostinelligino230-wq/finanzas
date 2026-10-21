@@ -1,16 +1,8 @@
 import { useMemo, useState } from "react";
 import { Lightbulb, ShieldCheck } from "lucide-react";
+import { BUDGET_GUIDE } from "../../shared/ahorro";
 
-type Category = "hogar" | "comida" | "impuestos" | "deudas" | "transporte" | "personal" | "ahorro";
-const recommendations: { key: Category; label: string; percentage: number; color: string; note: string }[] = [
-  { key: "hogar", label: "Hogar", percentage: 30, color: "#66864f", note: "Alquiler, expensas, servicios y mantenimiento." },
-  { key: "comida", label: "Comida", percentage: 15, color: "#b4863f", note: "Compras del hogar y comidas cotidianas." },
-  { key: "deudas", label: "Deudas", percentage: 15, color: "#b46b78", note: "Intentá que las cuotas no comprometan todo tu ingreso." },
-  { key: "impuestos", label: "Impuestos", percentage: 10, color: "#8b6d55", note: "Separá una parte para obligaciones previsibles." },
-  { key: "transporte", label: "Transporte", percentage: 10, color: "#4f7d98", note: "Movilidad, combustible y mantenimiento." },
-  { key: "personal", label: "Personal y salidas", percentage: 10, color: "#7a6190", note: "Gastos personales, deporte y entretenimiento." },
-  { key: "ahorro", label: "Ahorro", percentage: 10, color: "#4d8565", note: "Fondo de emergencia y objetivos." },
-];
+const recommendations = BUDGET_GUIDE;
 const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
 
 export default function SuggestionsPage() {

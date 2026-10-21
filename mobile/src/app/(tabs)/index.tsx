@@ -11,6 +11,8 @@ import { useColors } from "../../lib/theme";
 import { Icon } from "../../components/Icon";
 import { Fab } from "../../components/Fab";
 import { MovementRow, ReviewList } from "../../components/movements";
+import { PendingPayments } from "../../components/obligations";
+import { StatementSources } from "../../components/statements";
 import { Card, CategoryIcon, ErrorBox, MonthPicker, Screen, Segmented, T, styles } from "../../components/ui";
 
 export default function Home() {
@@ -56,6 +58,8 @@ export default function Home() {
 
         <ErrorBox message={data.error} />
         <ReviewList items={data.toReview} onConfirm={data.confirm} onRemove={data.remove} />
+        <StatementSources userId={userId} onlyPending />
+        <PendingPayments userId={userId} month={month} available={totals.available} />
 
         <MonthPicker month={month} onChange={(value) => { setMonth(value); setOpen(null); }} />
         <Segmented value={tab} onChange={(value) => { setTab(value); setOpen(null); }} options={[{ value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
