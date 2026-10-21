@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { Alert, Platform, Switch, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, Switch, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { AUTO_PROVIDERS } from "../../../../shared/providers";
 import { useAuth } from "../../lib/auth";
+import { activarAvisos, apagarAvisos, avisosDisponibles, useAvisos } from "../../lib/avisos";
 import { isInstant, useGmail, type ConnectResult } from "../../lib/gmail";
 import { disponible as lectorDisponible, useLector } from "../../lib/notificaciones";
 import { useColors } from "../../lib/theme";
 import { Icon } from "../../components/Icon";
 import { StatementSources } from "../../components/statements";
+import { toast } from "../../components/Toast";
 import { Button, Card, ErrorBox, Loading, Notice, Screen, T, styles } from "../../components/ui";
 
 const RESULTS: Record<ConnectResult, { text: string; ok: boolean }> = {
@@ -24,6 +26,8 @@ export default function Accounts() {
   const gmail = useGmail(userId);
   const params = useLocalSearchParams<{ gmail?: string }>();
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+  const avisos = useAvisos();
+  const [avisosBusy, setAvisosBusy] = useState(false);
 
   // Vuelta de Google como enlace a la app (finanzas://conectar?gmail=…).
   useEffect(() => {
@@ -48,6 +52,13 @@ export default function Accounts() {
     const result = await gmail.refresh();
     if (result) setNotice({ text: result.movimientos ? "Actualizado: " + result.movimientos + (result.movimientos === 1 ? " movimiento nuevo." : " movimientos nuevos.") : "Actualizado: no había movimientos nuevos.", ok: true });
   };
+  const toggleAvisos = async (on: boolean) => {
+    setAvisosBusy(true);
+    const problem = on ? await activarAvisos() : (await apagarAvisos()) ? null : "No se pudieron apagar los avisos. Revisá tu conexión.";
+    setAvisosBusy(false);
+    await avisos.refresh();
+    if (problem) toast(problem);
+  };
   const disconnect = () => Alert.alert("¿Desconectar tu Gmail?", "Los movimientos que ya se cargaron quedan.", [
     { text: "Cancelar", style: "cancel" },
     { text: "Desconectar", style: "destructive", onPress: () => gmail.disconnect() },
@@ -71,6 +82,13 @@ export default function Accounts() {
             <T variant="small">{isInstant(link) ? "Al instante: cada aviso entra apenas llega el mail." : "Se lee una vez por día y cuando tocás «Actualizar ahora»."}</T>
             <T variant="small">{link.last_sync_at ? "Última lectura: " + new Date(link.last_sync_at).toLocaleString("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Todavía no se leyó"}</T>
             <Button label={gmail.busy ? "Leyendo…" : "Actualizar ahora"} icon="RefreshCw" variant="soft" onPress={refresh} busy={gmail.busy} />
+            {avisosDisponibles ? <View style={[styles.row, { minHeight: 48 }]}>
+              <View style={{ flex: 1 }}>
+                <T style={{ fontWeight: "600" }}>Avisarme en el celular</T>
+                <T variant="small">Cuando entra un movimiento por mail te llega «Entró $…» o «Gastaste $…».</T>
+              </View>
+              {avisosBusy || avisos.activos === null ? <ActivityIndicator color={colors.primary} /> : <Switch value={avisos.activos} onValueChange={toggleAvisos} accessibilityLabel="Avisarme en el celular cuando entra un movimiento por mail" trackColor={{ true: colors.primary, false: colors.border }} />}
+            </View> : null}
           </>
         ) : (
           <>
