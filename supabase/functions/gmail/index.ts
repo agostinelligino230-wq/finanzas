@@ -1,12 +1,19 @@
 // Conexión con Gmail (solo lectura) para cargar avisos de Ualá, Mercado Pago, Wallbit, Nación y Macro.
 // GET ?start=…        → manda a la pantalla de Google para elegir la cuenta y dar permiso.
-// GET ?code=…&state=… → vuelve de Google: guarda el permiso, trae los últimos 60 días y vuelve a la app.
-// POST (con sesión)   → "Actualizar ahora" para ese usuario, buscar resúmenes de tarjeta ({accion:"tarjetas"})
-//                        o analizar el PDF de un resumen ({accion:"analizar", fuente, clave?, recordar?, auto?}).
-// POST (con X-Cron-Secret) → lo llama el programador diario: actualiza las cuentas que hace más de 20 horas no se leen.
+// GET ?code=…&state=… → vuelve de Google: guarda el permiso, trae los últimos 60 días, pide el aviso al instante y vuelve a la app.
+// POST (con sesión)   → "Actualizar ahora" para ese usuario, buscar resúmenes de tarjeta ({accion:"tarjetas"}),
+//                        analizar el PDF de un resumen ({accion:"analizar", fuente, clave?, recordar?, auto?})
+//                        o desconectar Gmail ({accion:"desconectar"}).
+// POST (con X-Cron-Secret) → lo llama el programador diario: actualiza las cuentas que hace más de 20 horas no se leen
+//                        y renueva el aviso al instante (vence a los 7 días). Es la red de seguridad de gmail-push.
 // POST sin sesión ni clave → 401: nadie de afuera puede disparar la lectura de las cuentas.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getDocumentProxy } from "npm:unpdf@1.8.1";
+import { accessToken, base64url, gmailGet, search, stopWatch, watch } from "../_shared/gmail.ts";
+import { BUSQUEDA, LEIDOS_POR_MAIL } from "../_shared/lectores/mail.ts";
+import { avisoDeMail, cotizacionUnaVez, procesarAviso } from "../_shared/lectores/procesar.ts";
+import type { Resumen } from "../_shared/lectores/tipos.ts";
+import { day } from "../_shared/lectores/texto.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -16,22 +23,27 @@ const CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 // Con esta clave se cifra la clave del PDF de cada resumen antes de guardarla.
 const PDF_KEY = Deno.env.get("PDF_KEY") ?? "";
+// Aviso al instante: topic de Pub/Sub ("projects/<proyecto>/topics/gmail-avisos"). Sin topic o con GMAIL_PUSH=off, solo el cron.
+const GMAIL_TOPIC = Deno.env.get("GMAIL_TOPIC") ?? "";
+const PUSH_ON = (Deno.env.get("GMAIL_PUSH") ?? "on") !== "off";
 const DEFAULT_APP = "https://finanzas-personales-ar.vercel.app";
+const APP_SCHEME = "finanzas://";
 const REDIRECT_URI = SUPABASE_URL + "/functions/v1/gmail";
 const SCOPES = "openid email profile https://www.googleapis.com/auth/gmail.readonly";
-const TZ = "America/Argentina/Buenos_Aires";
 
 const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
-// Solo se vuelve a la app (dominios propios), nunca a otro sitio.
-const safeReturn = (value: string | null) => (value && /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(value)) || (value && /^http:\/\/localhost(:\d+)?$/.test(value)) ? value : DEFAULT_APP;
+// Solo se vuelve a la app (dominios propios o la app del celular), nunca a otro sitio.
+const safeReturn = (value: string | null) => (value && /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(value)) || (value && /^http:\/\/localhost(:\d+)?$/.test(value)) || value === APP_SCHEME ? value : DEFAULT_APP;
+const returnUrl = (value: string | null, status: string) => {
+  const base = safeReturn(value);
+  return (base === APP_SCHEME ? APP_SCHEME + "conectar" : base + "/conectar") + "?gmail=" + status;
+};
 
-type Link = { user_id: string; email: string | null; name: string | null; refresh_token: string; providers: string[]; last_sync_at: string | null };
-type Movement = { id: string; type: "gasto" | "ingreso"; amount: number; description: string; category: string; source: string; currency: "ARS" | "USD"; original?: number; rate?: number; date: string; datetime: string };
-type Statement = { provider: string; card: string; color: string; month: string; due_date: string; total: number; total_usd: number };
-type Mail = { id: string; subject: string; from: string; text: string; date: Date };
+type Link = { user_id: string; email: string | null; name: string | null; refresh_token: string; providers: string[]; last_sync_at: string | null; history_id: string | null };
+type Statement = Resumen;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -58,7 +70,7 @@ async function callback(url: URL) {
   const state = url.searchParams.get("state");
   const code = url.searchParams.get("code");
   const { data: saved } = state ? await admin.from("gmail_link_states").select("user_id, return_to").eq("state", state).maybeSingle() : { data: null };
-  const back = (status: string) => Response.redirect(safeReturn(saved?.return_to ?? null) + "/conectar?gmail=" + status, 302);
+  const back = (status: string) => Response.redirect(returnUrl(saved?.return_to ?? null, status), 302);
   if (!saved) return back("error");
   await admin.from("gmail_link_states").delete().eq("state", state!);
   if (!code) return back("cancelado");
@@ -71,7 +83,8 @@ async function callback(url: URL) {
   if (!token.refresh_token || !String(token.scope ?? "").includes("gmail.readonly")) return back("sin-permiso");
 
   const profile = token.id_token ? JSON.parse(new TextDecoder().decode(base64url(token.id_token.split(".")[1]))) : {};
-  const link = { user_id: saved.user_id, email: profile.email ?? null, name: profile.name ?? null, refresh_token: token.refresh_token };
+  // Al (re)conectar, el aviso al instante arranca de cero (renewWatch fija el history_id nuevo).
+  const link = { user_id: saved.user_id, email: profile.email ? String(profile.email).toLowerCase() : null, name: profile.name ?? null, refresh_token: token.refresh_token, history_id: null, watch_expires_at: null };
   const { error } = await admin.from("gmail_links").upsert(link, { onConflict: "user_id" });
   if (error) return back("error");
   const { data: row } = await admin.from("gmail_links").select("*").eq("user_id", saved.user_id).single();
@@ -108,6 +121,7 @@ async function syncRequest(req: Request) {
       if (!source) return json({ error: "no existe" }, 404);
       return json(await analyzeSource(link, source as Source, { clave: body.clave, recordar: body.recordar, auto: body.auto }));
     }
+    if (body.accion === "desconectar") return json(await disconnect(link));
     return json(await syncLink(link));
   }
   // Programador diario: solo con la clave secreta. Sin sesión ni clave no se lee ninguna cuenta.
@@ -130,9 +144,9 @@ async function syncLink(link: Link, days?: number) {
     await admin.from("gmail_links").update({ last_result: { error: "permiso" } }).eq("user_id", link.user_id);
     return { error: "permiso" };
   }
-  const { movements, statements, mails } = await readMails(access, link, window);
-  const added = await saveMovements(link.user_id, movements);
+  const { added, statements, mails } = await readMails(access, link, window);
   const saved = await saveStatements(link.user_id, statements);
+  await renewWatch(access, link);
   // Resúmenes de tarjeta en PDF: se anotan los nuevos y se analizan solos los que autorizaste.
   let tarjetas = 0;
   try {
@@ -154,194 +168,52 @@ function sameText(a: string, b: string) {
   return diff === 0;
 }
 
-async function accessToken(refresh: string) {
-  const data = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, refresh_token: refresh, grant_type: "refresh_token" }),
-  }).then((response) => response.json());
-  return (data.access_token as string | undefined) ?? null;
-}
-
 // ---------- Lectura de mails ----------
 
-const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me/";
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Gmail limita los pedidos por minuto: si se pasa, espera un poco y reintenta.
-async function gmailGet(access: string, path: string) {
-  for (let attempt = 0; ; attempt++) {
-    const data = await fetch(GMAIL + path, { headers: { Authorization: "Bearer " + access } }).then((response) => response.json()).catch(() => ({}));
-    const limited = data?.error && (data.error.code === 429 || /rate|quota/i.test(String(data.error.message ?? "")));
-    if (!limited || attempt >= 3) return data;
-    await wait(4000 * (attempt + 1));
-  }
-}
-
-async function search(access: string, query: string, days: number, max = 100): Promise<Mail[]> {
-  const list = await gmailGet(access, "messages?maxResults=" + max + "&q=" + encodeURIComponent(query + " newer_than:" + days + "d"));
-  const mails: Mail[] = [];
-  for (const item of (list.messages ?? []) as { id: string }[]) {
-    const message = await gmailGet(access, "messages/" + item.id + "?format=full");
-    if (!message.payload) continue; // Si Gmail no lo devuelve, se lee en la próxima.
-    const headers = (message.payload.headers ?? []) as { name: string; value: string }[];
-    const header = (name: string) => headers.find((entry) => entry.name.toLowerCase() === name)?.value ?? "";
-    mails.push({ id: item.id, subject: header("subject"), from: header("from"), text: bodyText(message.payload).replace(/\s+/g, " "), date: new Date(Number(message.internalDate)) });
-  }
-  return mails;
-}
-
-type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[] };
-
-function bodyText(payload: Part): string {
-  const plain = findPart(payload, "text/plain");
-  if (plain) return decode(plain);
-  const html = findPart(payload, "text/html");
-  if (!html) return "";
-  return decode(html)
-    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<br\s*\/?>|<\/(p|div|tr|td|li|h\d)>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&zwnj;/g, " ").replace(/&#36;|&dollar;/g, "$").replace(/&amp;/g, "&").replace(/&aacute;/g, "á").replace(/&eacute;/g, "é").replace(/&iacute;/g, "í").replace(/&oacute;/g, "ó").replace(/&uacute;/g, "ú").replace(/&ntilde;/g, "ñ")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
-}
-
-function findPart(part: Part, mime: string): string | null {
-  if (part.mimeType === mime && part.body?.data) return part.body.data;
-  for (const child of part.parts ?? []) {
-    const found = findPart(child, mime);
-    if (found) return found;
-  }
-  return null;
-}
-
-function base64url(value: string) {
-  const normal = value.replace(/-/g, "+").replace(/_/g, "/");
-  const binary = atob(normal + "===".slice((normal.length + 3) % 4));
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-}
-
-const decode = (data: string) => new TextDecoder().decode(base64url(data));
-
-const day = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
-
-// "$50.000,00" o "$3500" → 50000 / 3500
-function amount(text: string) {
-  const clean = text.replace(/\.$/, "");
-  return Number(clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean.replace(/\.(?=\d{3}(\D|$))/g, ""));
-}
-
-const titleCase = (text: string) => text.toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
-
-// Transferencias a vos mismo (por nombre o alias) no cuentan como gasto.
-function isOwn(name: string | null, text: string) {
-  const words = (name ?? "").toLowerCase().split(/\s+/).filter((word) => word.length > 2);
-  if (words.length < 2) return false;
-  const clean = text.toLowerCase().replace(/[^a-záéíóúñ]/g, "");
-  return clean.includes(words[0]) && clean.includes(words[words.length - 1]);
-}
-
-const MONTHS: Record<string, string> = { ene: "01", jan: "01", feb: "02", mar: "03", abr: "04", apr: "04", may: "05", jun: "06", jul: "07", ago: "08", aug: "08", sep: "09", set: "09", oct: "10", nov: "11", dic: "12", dec: "12" };
-
-const expense = (id: string, mail: Mail, value: number, description: string, category: string, source: string): Movement => ({ id, type: "gasto", amount: value, description, category, source, currency: "ARS", date: day(mail.date), datetime: mail.date.toISOString() });
-
-async function dollarRate() {
-  for (const kind of ["cripto", "bolsa"]) {
-    try {
-      const data = await fetch("https://dolarapi.com/v1/dolares/" + kind).then((response) => response.json());
-      if (data?.compra) return Number(data.compra);
-    } catch { /* probar el siguiente */ }
-  }
-  return null;
-}
-
+// Una sola búsqueda en Gmail para todas las cuentas; cada mail entra por la misma puerta que el aviso al instante.
 async function readMails(access: string, link: Link, days: number) {
-  const movements: Movement[] = [];
+  const providers = link.providers ?? [];
+  const all = LEIDOS_POR_MAIL.some((id) => providers.includes(id)) ? await search(access, BUSQUEDA, days, 300) : [];
+  const ctx = { userId: link.user_id, nombre: link.name, proveedores: providers, cotizacion: cotizacionUnaVez() };
   const statements: Statement[] = [];
-  const reads = (id: string) => (link.providers ?? []).includes(id);
-  // Cuántos mails se encontraron por cuenta (para saber si algo no se está leyendo).
-  const found: Record<string, number> = {};
-  // Una sola búsqueda para todas las cuentas (Gmail cobra cada búsqueda) y después se separa por remitente y asunto.
-  const ids = ["uala", "mercadopago", "nacion", "macro", "wallbit"].filter(reads);
-  const all = ids.length ? await search(access, '{from:uala.com.ar from:mercadopago from:bna from:macro from:wallbit} {subject:"transferencia fue exitosa" subject:"Resumen tarjeta" subject:"Pago aprobado" subject:"Aviso de transferencia" subject:Recibiste}', days, 300) : [];
-  const pick = (id: string, from: RegExp, subject: RegExp) => { const list = all.filter((mail) => from.test(mail.from) && subject.test(mail.subject)); found[id] = (found[id] ?? 0) + list.length; return list; };
-
-  if (reads("uala")) {
-    for (const mail of pick("uala", /uala/i, /transferencia fue exitosa/i)) {
-      const value = mail.text.match(/Monto:?\s*\$\s*([\d.,]+)/i);
-      const to = mail.text.match(/Destinatario:?\s+(.+?)\s+(CBU|CVU|Alias|Id\.)/i);
-      const op = mail.text.match(/Id\.?\s*Op\.?:?\s*([\w-]+)/i);
-      const name = to ? to[1].trim() : "";
-      if (!value || !op || isOwn(link.name, name)) continue;
-      movements.push(expense("uala:" + op[1], mail, amount(value[1]), name ? "Transferencia a " + titleCase(name) : "Transferencia", "transferencias", "uala"));
-    }
-    for (const mail of pick("uala", /uala/i, /Resumen tarjeta/i)) {
-      const due = mail.text.match(/vencimiento:?\s+(\d{1,2})\s+([A-Za-zÁÉÍÓÚáéíóú]{3})[A-Za-zÁÉÍÓÚáéíóú]*\.?\s+(\d{4})/i);
-      const pesos = mail.text.match(/Total en pesos:?\s*\$\s*([\d.,]+)/i);
-      const usd = mail.text.match(/Total en d[oó]lares:?\s*(?:USD|US\$)\s*([\d.,]+)/i);
-      const month = due ? MONTHS[due[2].toLowerCase()] : null;
-      if (!due || !pesos || !month) continue;
-      statements.push({ provider: "uala", card: "Ualá", color: "#2F80ED", month: due[3] + "-" + month, due_date: due[3] + "-" + month + "-" + due[1].padStart(2, "0"), total: amount(pesos[1]), total_usd: usd ? amount(usd[1]) : 0 });
-    }
-  }
-
-  if (reads("mercadopago")) {
-    for (const mail of pick("mercadopago", /mercado ?pago/i, /Pago aprobado/i)) {
-      const value = mail.text.match(/Pagaste:?\s*\$\s*([\d.,]+)/i);
-      if (!value) continue;
-      const shop = mail.subject.replace(/^.*Pago aprobado (en|a)\s*/i, "").trim();
-      movements.push(expense("mail:" + mail.id, mail, amount(value[1]), (shop || "Pago") + " (Mercado Pago)", "otro", "mercadopago"));
-    }
-  }
-
-  if (reads("nacion")) {
-    for (const mail of pick("nacion", /bna/i, /Aviso de transferencia/i)) {
-      const data = mail.text.match(/transferencia a (.+?) por \$\s*([\d.,]+)/i);
-      if (!data || isOwn(link.name, data[1])) continue;
-      movements.push(expense("mail:" + mail.id, mail, amount(data[2]), "Transferencia a " + titleCase(data[1].trim()) + " (Nación)", "transferencias", "nacion"));
-    }
-  }
-
-  if (reads("macro")) {
-    for (const mail of pick("macro", /macro/i, /Aviso de Transferencia/i)) {
-      const data = mail.text.match(/transferencia al CBU\/CVU\/alias\s+(\S+)\s+por\s+\$\s*([\d.,]+)/i);
-      if (!data || isOwn(link.name, data[1])) continue;
-      movements.push(expense("mail:" + mail.id, mail, amount(data[2]), "Transferencia a " + data[1] + " (Macro)", "transferencias", "macro"));
-    }
-  }
-
-  if (reads("wallbit")) {
-    const rate = await dollarRate();
-    if (rate) {
-      for (const mail of pick("wallbit", /wallbit/i, /Recibiste/i)) {
-        // El monto viene en el mail o en el asunto ("Recibiste USD $691.55").
-        const value = mail.text.match(/Monto:\s*USD\s*\$?\s*([\d.,]+)/i) ?? mail.subject.match(/Recibiste\s+US[D$]\s*\$?\s*([\d.,]+)/i);
-        const origin = mail.text.match(/Origen:\s*(.+?)\s*(ID de operaci|$)/i);
-        const op = mail.text.match(/ID de operaci[oó]n:\s*([\w-]+)/i);
-        if (!value) continue;
-        const dollars = Number(value[1].replace(/,/g, ""));
-        movements.push({ id: op ? "wallbit:" + op[1] : "mail:" + mail.id, type: "ingreso", category: "otro", source: "wallbit", currency: "USD", original: dollars, rate, amount: Math.round(dollars * rate * 100) / 100, description: origin ? "Wallbit · " + titleCase(origin[1]) : "Wallbit", date: day(mail.date), datetime: mail.date.toISOString() });
-      }
-    }
-  }
-
+  // Cuántos mails se encontraron por cuenta y cuántos se leyeron (para saber si algo no se está leyendo).
   const mails: Record<string, { mails: number; leidos: number }> = {};
-  for (const id of Object.keys(found)) mails[id] = { mails: found[id], leidos: movements.filter((item) => item.source === id).length + statements.filter((item) => item.provider === id).length };
-  return { movements, statements, mails };
+  let added = 0;
+  for (const mail of all) {
+    const result = await procesarAviso(admin, avisoDeMail(mail), ctx);
+    if (result.resumen) statements.push(result.resumen);
+    if (result.estado === "new") added++;
+    if (!result.proveedor || !result.reconocido) continue;
+    const entry = (mails[result.proveedor] ??= { mails: 0, leidos: 0 });
+    entry.mails++;
+    if (result.leido) entry.leidos++;
+  }
+  return { added, statements, mails };
 }
 
-// ---------- Guardado ----------
+// ---------- Aviso al instante (Gmail → Pub/Sub → gmail-push) ----------
 
-async function saveMovements(userId: string, movements: Movement[]) {
-  const rows = movements.filter((item) => item.amount > 0).map((item) => ({
-    user_id: userId, description: item.description.slice(0, 120), amount: item.amount, category: item.category, movement_type: item.type, movement_date: item.date, paid: true,
-    currency: item.currency, original_amount: item.original ?? null, exchange_rate: item.rate ?? null, source: item.source, external_id: item.id, created_at: item.datetime,
-  }));
-  if (rows.length === 0) return 0;
-  const { data, error } = await admin.from("movements").upsert(rows, { onConflict: "user_id,external_id", ignoreDuplicates: true }).select("id");
-  if (error) throw error;
-  return data?.length ?? 0;
+// Se pide al conectar y todos los días (el aviso vence a los 7). El history_id solo se fija la primera vez:
+// desde ahí lo avanza gmail-push, así no se saltea ningún mail.
+async function renewWatch(access: string, link: Link) {
+  if (!GMAIL_TOPIC || !PUSH_ON) return;
+  try {
+    const result = await watch(access, GMAIL_TOPIC);
+    if (!result) { console.error("watch: Gmail no aceptó el aviso", link.user_id); return; }
+    await admin.from("gmail_links").update({ watch_expires_at: result.expiration, ...(link.history_id ? {} : { history_id: result.historyId }) }).eq("user_id", link.user_id);
+  } catch (error) { console.error("watch", error); }
 }
+
+// Desconectar: se corta el aviso, se le devuelve el permiso a Google y se borra la conexión. Los movimientos quedan.
+async function disconnect(link: Link) {
+  const access = await accessToken(link.refresh_token);
+  if (access) await stopWatch(access);
+  await fetch("https://oauth2.googleapis.com/revoke", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ token: link.refresh_token }) }).catch(() => null);
+  const { error } = await admin.from("gmail_links").delete().eq("user_id", link.user_id);
+  return error ? { error: "no-se-pudo" } : { ok: true };
+}
+
+// ---------- Resúmenes que llegan en el cuerpo del mail ----------
 
 async function saveStatements(userId: string, statements: Statement[]) {
   let count = 0;
