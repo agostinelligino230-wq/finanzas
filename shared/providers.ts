@@ -9,7 +9,7 @@ export const PROVIDERS: Provider[] = [
   { id: "uala", name: "Ualá", kind: "billetera", color: "#2F80ED", domain: "uala.com.ar", auto: "Transferencias que hacés y el resumen de la tarjeta" },
   { id: "mercadopago", name: "Mercado Pago", kind: "billetera", color: "#169C8C", domain: "mercadopago.com.ar", auto: "Pagos aprobados" },
   { id: "wallbit", name: "Wallbit", kind: "billetera", color: "#3D4A63", domain: "wallbit.io", auto: "Dólares que recibís (como ingreso en US$)" },
-  { id: "naranjax", name: "Naranja X", kind: "billetera", color: "#F08C2E", domain: "naranjax.com" },
+  { id: "naranjax", name: "Naranja X", kind: "billetera", color: "#F08C2E", domain: "naranjax.com", auto: "Compras con tu tarjeta de crédito" },
   { id: "brubank", name: "Brubank", kind: "billetera", color: "#5B6CF0", domain: "brubank.com" },
   { id: "lemon", name: "Lemon", kind: "billetera", color: "#3BB273", domain: "lemon.me" },
   { id: "belo", name: "Belo", kind: "billetera", color: "#5B6CF0", domain: "belo.app" },

@@ -4,8 +4,8 @@ import type { Aviso, Lector, Lectura } from "./tipos.ts";
 import { amount, isOwn, MONTHS, titleCase } from "./texto.ts";
 
 // Una sola búsqueda en Gmail para todas las cuentas (Gmail cobra cada búsqueda) y después se separa por remitente y asunto.
-export const BUSQUEDA = '{from:uala.com.ar from:mercadopago from:bna from:macro from:wallbit} {subject:"transferencia fue exitosa" subject:"Resumen tarjeta" subject:"Pago aprobado" subject:"Aviso de transferencia" subject:Recibiste}';
-export const LEIDOS_POR_MAIL = ["uala", "mercadopago", "nacion", "macro", "wallbit"];
+export const BUSQUEDA = '{from:uala.com.ar from:mercadopago from:bna from:macro from:wallbit from:naranjax.com} {subject:"transferencia fue exitosa" subject:"Resumen tarjeta" subject:"Pago aprobado" subject:"Aviso de transferencia" subject:Recibiste subject:"una compra en tu tarjeta"}';
+export const LEIDOS_POR_MAIL = ["uala", "mercadopago", "nacion", "macro", "wallbit", "naranjax"];
 
 const de = (aviso: Aviso, from: RegExp, subject: RegExp) => from.test(aviso.remitente) && subject.test(aviso.titulo);
 
@@ -63,6 +63,20 @@ export const LECTORES_MAIL: Lector[] = [
       if (!data) return null;
       if (isOwn(ctx.nombre, data[1])) return { descartar: "transferencia a vos mismo" };
       return { tipo: "gasto", monto: amount(data[2]), moneda: "ARS", descripcion: "Transferencia a " + data[1] + " (Macro)", categoria: "transferencias" };
+    },
+  },
+  {
+    // «Ingresó una compra en tu tarjeta crédito»: TU COMPRA $ 57.600,00 COMERCIO Titular - … Plan 06 cuotas en PESOS
+    proveedor: "naranjax", canal: "mail",
+    reconoce: (aviso) => de(aviso, /naranja/i, /una compra en tu tarjeta/i),
+    leer(aviso) {
+      const data = aviso.texto.match(/TU COMPRA\s*\$\s*([\d.]+,\d{2})\s+(.+?)\s+Titular\b/i);
+      const plan = aviso.texto.match(/Plan\s+(.+?)\s+en\s+(PESOS|D[OÓ]LARES)\b/i);
+      // Solo compras en pesos: todavía no hay muestras de una en dólares (queda «no reconocido»).
+      if (!data || !plan || !/PESOS/i.test(plan[2])) return null;
+      const cuotas = Number(plan[1].match(/^(\d+)\s*cuotas?/i)?.[1] ?? 1);
+      const detalle = cuotas > 1 ? " en " + cuotas + " cuotas" : /ZETA|\bZ\b/i.test(plan[1]) ? " en Plan Z" : "";
+      return { tipo: "gasto", monto: amount(data[1]), moneda: "ARS", descripcion: titleCase(data[2].trim()) + detalle + " (Naranja X)", categoria: "otro" };
     },
   },
   {

@@ -8,21 +8,22 @@ export type Entidad = {
   dominios: string[];   // dominios oficiales de mail (sirven para la firma DKIM y para filtrar)
   // Con true, un mail sin firma DKIM de esos dominios queda «dudoso». Con false (falta confirmar
   // los dominios con mails reales, prueba P2) sigue sumando como hasta hoy, sin sello.
+  // Confirmados el 21-oct con mails reales: Mercado Pago, Wallbit y Naranja X.
   dkimConfirmado: boolean;
   paquetes: string[];   // apps oficiales de Android
 };
 
 export const ENTIDADES: Entidad[] = [
   { id: "uala", nombre: "Ualá", remitente: /uala/i, dominios: ["uala.com.ar"], dkimConfirmado: false, paquetes: ["ar.com.bancar.uala"] },
-  { id: "mercadopago", nombre: "Mercado Pago", remitente: /mercado ?pago/i, dominios: ["mercadopago.com", "mercadopago.com.ar"], dkimConfirmado: false, paquetes: ["com.mercadopago.wallet"] },
-  { id: "wallbit", nombre: "Wallbit", remitente: /wallbit/i, dominios: ["wallbit.io"], dkimConfirmado: false, paquetes: [] },
+  { id: "mercadopago", nombre: "Mercado Pago", remitente: /mercado ?pago/i, dominios: ["mercadopago.com", "mercadopago.com.ar"], dkimConfirmado: true, paquetes: ["com.mercadopago.wallet"] },
+  { id: "wallbit", nombre: "Wallbit", remitente: /wallbit/i, dominios: ["wallbit.io"], dkimConfirmado: true, paquetes: [] },
   { id: "nacion", nombre: "Banco Nación", remitente: /bna/i, dominios: ["bna.com.ar"], dkimConfirmado: false, paquetes: ["com.banconacion.bnamas"] },
   { id: "macro", nombre: "Banco Macro", remitente: /macro/i, dominios: ["macro.com.ar"], dkimConfirmado: false, paquetes: [] },
   // Galicia publicó sus únicos remitentes oficiales (cuenta @BancoGalicia en X, ago-2022). Falta ver con qué dominio firman (P2).
-  { id: "galicia", nombre: "Galicia", remitente: /galicia/i, dominios: ["email.galicia.ar", "email.quiero.ar", "mkt.bancogalicia.com.ar", "bancogalicia.com.ar", "mensajesgalicia.com.ar", "mktins.galicia.ar"], dkimConfirmado: false, paquetes: ["com.mosync.app_Banco_Galicia"] },
+  { id: "galicia", nombre: "Galicia", remitente: /galicia/i, dominios: ["email.galicia.ar", "email.quiero.ar", "mkt.bancogalicia.com.ar", "bancogalicia.com.ar", "mensajesgalicia.com.ar", "mktins.galicia.ar", "mail.beneficios.galicia.ar"], dkimConfirmado: false, paquetes: ["com.mosync.app_Banco_Galicia"] },
   // Solo por notificación (lista argentina de Bluecoins + Naranja X). Falta el paquete de Macro y de Wallbit.
-  { id: "naranjax", nombre: "Naranja X", dominios: [], dkimConfirmado: false, paquetes: ["com.tarjetanaranja.ncuenta"] },
-  { id: "brubank", nombre: "Brubank", dominios: [], dkimConfirmado: false, paquetes: ["com.brubank"] },
+  { id: "naranjax", nombre: "Naranja X", remitente: /naranja/i, dominios: ["naranjax.com"], dkimConfirmado: true, paquetes: ["com.tarjetanaranja.ncuenta"] },
+  { id: "brubank", nombre: "Brubank", dominios: ["brubank.com"], dkimConfirmado: false, paquetes: ["com.brubank"] },
   { id: "bbva", nombre: "BBVA", dominios: [], dkimConfirmado: false, paquetes: ["com.bbva.nxt_argentina"] },
   { id: "santander", nombre: "Santander", dominios: [], dkimConfirmado: false, paquetes: ["ar.com.santander.rio.mbanking"] },
   { id: "cuentadni", nombre: "Cuenta DNI", dominios: [], dkimConfirmado: false, paquetes: ["ar.com.bancoprovincia.CuentaDNI"] },
