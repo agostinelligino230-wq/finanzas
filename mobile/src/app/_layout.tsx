@@ -2,6 +2,7 @@ import { ActivityIndicator, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Toaster } from "../components/Toast";
 import { AuthProvider, useAuth } from "../lib/auth";
 import { useColors } from "../lib/theme";
 
@@ -26,11 +27,19 @@ function Root() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="agregar" options={{ presentation: "modal" }} />
+        <Stack.Screen name="pagar" options={{ presentation: "modal" }} />
+        <Stack.Screen name="fijo" options={{ presentation: "modal" }} />
+        <Stack.Screen name="tarjeta" options={{ presentation: "modal" }} />
+        <Stack.Screen name="cuota" options={{ presentation: "modal" }} />
+        <Stack.Screen name="fijos" />
+        <Stack.Screen name="ahorro" />
+        <Stack.Screen name="sugerencias" />
         <Stack.Screen name="login" />
         <Stack.Screen name="conectar" />
         <Stack.Screen name="notificaciones" />
         <Stack.Screen name="auth" />
       </Stack>
+      <Toaster />
     </>
   );
 }

@@ -1,54 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { readCache, writeCache } from "./cache";
-import { monthsBetween, shiftMonth } from "./format";
 import { addLinkedExpense, cardExternalId, payDate, removeLinkedExpense } from "./obligations";
-
-export type CreditCard = { id: string; name: string; color: string; dueDay: number | null; provider: string | null };
-export type CardItemKind = "cuotas" | "fijo";
-// "amount" es lo que se paga por mes (la cuota, o el cargo fijo).
-// "firstMonth" es el mes en que se paga la primera cuota (o desde cuándo corre el fijo).
-export type CardItem = { id: string; cardId: string; description: string; kind: CardItemKind; amount: number; installments: number | null; firstMonth: string; endMonth: string | null };
-export type CardPayment = { cardId: string; month: string; amount: number };
-export type StatementLine = { date: string | null; description: string; amount: number; currency: "ARS" | "USD"; kind: "consumo" | "cargo" | "pago"; cuota?: { n: number; m: number } };
-export type CardStatement = { id: string; cardId: string; month: string; total: number; totalUsd: number; dueDate: string | null; paid: boolean; source: string | null; closingDate: string | null; minPayment: number | null; lines: StatementLine[] };
-
-type CardRow = { id: string; name: string; color: string; due_day: number | null; provider?: string | null };
-type PaymentRow = { card_id: string; month: string; amount: number | string };
-type ItemRow = { id: string; card_id: string; description: string; kind: CardItemKind; amount: number | string; installments: number | null; first_month: string; end_month: string | null };
-type StatementRow = { id: string; card_id: string; month: string; total: number | string; total_usd: number | string; due_date: string | null; paid: boolean; source: string | null; closing_date?: string | null; min_payment?: number | string | null; details?: { consumos?: StatementLine[] } | null };
-
-const cardFromRow = (row: CardRow): CreditCard => ({ id: row.id, name: row.name, color: row.color, dueDay: row.due_day, provider: row.provider ?? null });
-const paymentFromRow = (row: PaymentRow): CardPayment => ({ cardId: row.card_id, month: row.month, amount: Number(row.amount) });
-const itemFromRow = (row: ItemRow): CardItem => ({ id: row.id, cardId: row.card_id, description: row.description, kind: row.kind, amount: Number(row.amount), installments: row.installments, firstMonth: row.first_month, endMonth: row.end_month });
-const statementFromRow = (row: StatementRow): CardStatement => ({ id: row.id, cardId: row.card_id, month: row.month, total: Number(row.total), totalUsd: Number(row.total_usd), dueDate: row.due_date, paid: row.paid, source: row.source, closingDate: row.closing_date ?? null, minPayment: row.min_payment == null ? null : Number(row.min_payment), lines: row.details?.consumos ?? [] });
-
-// Número de cuota que toca en un mes (1 = primera). null si ese mes no corresponde.
-export function installmentNumber(item: CardItem, month: string): number | null {
-  const n = monthsBetween(item.firstMonth, month) + 1;
-  if (n < 1) return null;
-  if (item.kind === "cuotas") return n <= (item.installments ?? 1) ? n : null;
-  if (item.endMonth && month > item.endMonth) return null;
-  return n;
-}
-
-export const lastMonth = (item: CardItem) => (item.kind === "cuotas" ? shiftMonth(item.firstMonth, (item.installments ?? 1) - 1) : item.endMonth);
-
-export const itemsForMonth = (items: CardItem[], cardId: string, month: string) => items.filter((item) => item.cardId === cardId && installmentNumber(item, month) !== null);
-
-export function cardMonthSummary(items: CardItem[], statements: CardStatement[], cardId: string, month: string, payments: CardPayment[] = []) {
-  const loaded = itemsForMonth(items, cardId, month).reduce((sum, item) => sum + item.amount, 0);
-  const statement = statements.find((entry) => entry.cardId === cardId && entry.month === month) ?? null;
-  const payment = payments.find((entry) => entry.cardId === cardId && entry.month === month) ?? null;
-  // Lo que se pagó manda; si no, el total real del resumen; si no llegó, la suma de cuotas y fijos cargados.
-  return { loaded, statement, payment, total: payment ? payment.amount : statement ? statement.total : loaded };
-}
-
-export function cardsMonthTotal(cards: CreditCard[], items: CardItem[], statements: CardStatement[], month: string, payments: CardPayment[] = []) {
-  return cards.reduce((sum, card) => sum + cardMonthSummary(items, statements, card.id, month, payments).total, 0);
-}
-
-type State = { cards: CreditCard[]; items: CardItem[]; statements: CardStatement[]; payments: CardPayment[] };
+import { cardFromRow, cardItemFromRow as itemFromRow, cardItemToRow, cardPaymentFromRow as paymentFromRow, statementFromRow, withoutCard, type CardItem, type CardItemRow as ItemRow, type CardPaymentRow as PaymentRow, type CardRow, type CardStatementRow as StatementRow, type CardsState as State, type CreditCard } from "../../shared/tarjetas";
+// Tipos y cálculos compartidos con la app del celular (shared/tarjetas.ts).
+export { cardMonthSummary, cardsMonthTotal, installmentNumber, itemsForMonth, lastMonth, type CardItem, type CardItemKind, type CardPayment, type CardStatement, type CreditCard, type StatementLine } from "../../shared/tarjetas";
 
 export function useCards(userId: string) {
   const [state, setState] = useState<State>(() => readCache<State>("cards_v3", userId) ?? { cards: [], items: [], statements: [], payments: [] });
@@ -88,13 +44,13 @@ export function useCards(userId: string) {
     if (!supabase) return false;
     const { error: saveError } = await supabase.from("credit_cards").delete().eq("id", card.id);
     if (saveError) return fail("No se pudo eliminar la tarjeta.");
-    setState((current) => ({ cards: current.cards.filter((entry) => entry.id !== card.id), items: current.items.filter((entry) => entry.cardId !== card.id), statements: current.statements.filter((entry) => entry.cardId !== card.id), payments: current.payments.filter((entry) => entry.cardId !== card.id) }));
+    setState((current) => withoutCard(current, card.id));
     return true;
   };
 
   const saveItem = async (input: Omit<CardItem, "id"> & { id?: string }) => {
     if (!supabase) return false;
-    const row = { card_id: input.cardId, description: input.description, kind: input.kind, amount: input.amount, installments: input.kind === "cuotas" ? input.installments : null, first_month: input.firstMonth, end_month: input.kind === "fijo" ? input.endMonth : null };
+    const row = cardItemToRow(input);
     const query = input.id ? supabase.from("card_items").update(row).eq("id", input.id).select().single() : supabase.from("card_items").insert({ user_id: userId, ...row }).select().single();
     const { data, error: saveError } = await query;
     if (saveError || !data) return fail("No se pudo guardar. Probá de nuevo.");

@@ -41,11 +41,30 @@ export const timeLabel = (iso: string) => {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
 };
 
-// Acepta "1.250.000", "1250000" o "1250,50"
+// Acepta "1.250.000", "1250000", "1250,50", "$ 1.250" o "US$ 30"
 export const parseAmount = (text: string) => {
-  const cleaned = text.replace(/\s/g, "").replace(/\$/g, "").replace(/\./g, "").replace(",", ".");
+  let cleaned = text.replace(/[^\d.,]/g, "");
+  // "12.50": un solo punto con 1 o 2 decimales y sin coma son centavos (teclados que solo tienen punto).
+  if (/^\d+\.\d{1,2}$/.test(cleaned)) return Number(cleaned);
+  cleaned = cleaned.replace(/\./g, "").replace(",", ".");
   const value = Number(cleaned);
   return Number.isFinite(value) ? value : NaN;
+};
+
+// "21/10/2026" (como se escribe acá) a partir de "2026-10-21"
+export const dayText = (date: string) => date.slice(8, 10) + "/" + date.slice(5, 7) + "/" + date.slice(0, 4);
+
+// Acepta "21/10/2026", "21/10/26", "21/10" (este año), "21-10-2026" o "2026-10-21". Devuelve "AAAA-MM-DD" o null.
+export const parseDay = (text: string) => {
+  const value = text.trim();
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(value);
+  const local = /^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2}|\d{4}))?$/.exec(value);
+  const parts = iso ? [iso[1], iso[2], iso[3]] : local ? [local[3] ? (local[3].length === 2 ? "20" + local[3] : local[3]) : todayISO().slice(0, 4), local[2], local[1]] : null;
+  if (!parts) return null;
+  const [year, month, day] = parts.map(Number);
+  const date = new Date(year, month - 1, day, 12);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return year + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
 };
 
 // Cuántos meses hay entre dos meses "AAAA-MM" (b - a)

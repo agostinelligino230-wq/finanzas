@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
-import { Redirect } from "expo-router";
+import { Redirect, useLocalSearchParams } from "expo-router";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { useColors } from "../lib/theme";
@@ -17,7 +17,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const params = useLocalSearchParams<{ error?: string }>();
+  const [error, setError] = useState(params.error ?? "");
   const [message, setMessage] = useState("");
 
   const go = (next: Mode) => { setMode(next); setError(""); setMessage(""); };

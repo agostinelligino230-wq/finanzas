@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import * as WebBrowser from "expo-web-browser";
+import { toast } from "../components/Toast";
 import { supabase, SUPABASE_URL } from "./supabase";
 
 // Conexión con Gmail desde el celular: el mismo botón que la web. Google vuelve a la app (finanzas://conectar).
@@ -21,7 +22,9 @@ export function useGmail(userId: string) {
     if (!supabase) return;
     let { data, error: loadError } = await supabase.from("gmail_links").select(COLUMNS + ", watch_expires_at").maybeSingle();
     if (loadError) ({ data, error: loadError } = await supabase.from("gmail_links").select(COLUMNS).maybeSingle());
-    if (loadError) setError("No se pudo cargar la conexión con Gmail.");
+    // Si no se pudo leer, no se muestra «Conectá tu Gmail» a quien ya lo tiene conectado: queda el error con Reintentar.
+    if (loadError) { setError("No se pudo cargar la conexión con Gmail. Revisá tu conexión."); return; }
+    setError("");
     setLink((data as GmailLink | null) ?? null);
     setLoaded(true);
   }, []);
@@ -57,15 +60,16 @@ export function useGmail(userId: string) {
     setBusy(true);
     const { data, error: disconnectError } = await supabase.functions.invoke("gmail", { body: { accion: "desconectar" } });
     setBusy(false);
-    if (disconnectError || data?.error) { setError("No se pudo desconectar. Probá de nuevo."); return; }
+    if (disconnectError || data?.error) { toast("No se pudo desconectar tu Gmail. Revisá tu conexión.", { action: { label: "Reintentar", onPress: disconnect } }); return; }
     setLink(null);
+    toast("Listo: desconectamos tu Gmail. Lo que ya se cargó queda.", { ok: true });
   };
 
   const setProviders = async (providers: string[]) => {
     if (!supabase || !link) return;
     setLink({ ...link, providers });
     const { error: saveError } = await supabase.from("gmail_links").update({ providers }).eq("user_id", userId);
-    if (saveError) setError("No se pudo guardar qué cuentas leer.");
+    if (saveError) { setLink(link); toast("No se pudo guardar qué cuentas leer. Revisá tu conexión."); }
   };
 
   return { link, loaded, busy, error, connect, refresh, disconnect, setProviders, reload: load };

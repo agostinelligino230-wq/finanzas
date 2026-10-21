@@ -13,6 +13,7 @@ export function Screen({ children, title, refreshing, onRefresh, footer, edges =
       <ScrollView
         contentContainerStyle={styles.screen}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         refreshControl={onRefresh ? <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} /> : undefined}
       >
         {title ? <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{title}</Text> : null}
@@ -95,10 +96,32 @@ export function MonthPicker({ month, onChange }: { month: string; onChange: (mon
   );
 }
 
-export function ErrorBox({ message }: { message: string }) {
+// Error con ícono y texto (no solo color) y, si se puede, el botón para volver a intentar ahí mismo.
+export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const colors = useColors();
   if (!message) return null;
-  return <Text accessibilityRole="alert" style={[styles.notice, { backgroundColor: colors.expenseSoft, color: colors.expense }]}>{message}</Text>;
+  return (
+    <View accessibilityRole="alert" style={[styles.notice, styles.row, { gap: 10, backgroundColor: colors.expenseSoft, paddingVertical: onRetry ? 4 : 12, paddingRight: onRetry ? 4 : 16 }]}>
+      <Icon name="CircleAlert" size={18} color={colors.expense} />
+      <Text style={{ flex: 1, color: colors.expense, fontSize: 14 }}>{message}</Text>
+      {onRetry ? (
+        <Pressable accessibilityRole="button" onPress={onRetry} style={({ pressed }) => ({ minHeight: 44, paddingHorizontal: 12, justifyContent: "center", opacity: pressed ? 0.6 : 1 })}>
+          <Text style={{ color: colors.expense, fontWeight: "700", fontSize: 14 }}>Reintentar</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+// Mientras llegan los datos: nunca se muestra «no hay nada» (ni $ 0) antes de saberlo.
+export function Loading({ label }: { label: string }) {
+  const colors = useColors();
+  return (
+    <Card style={{ alignItems: "center", paddingVertical: 32, gap: 12 }}>
+      <ActivityIndicator color={colors.primary} />
+      <T variant="small" style={{ fontSize: 14 }}>{label}</T>
+    </Card>
+  );
 }
 
 export function Notice({ message, ok = true }: { message: string; ok?: boolean }) {

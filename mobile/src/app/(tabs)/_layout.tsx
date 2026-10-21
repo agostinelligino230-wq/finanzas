@@ -20,6 +20,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: "Inicio", tabBarIcon: ({ color }) => <Icon name="House" color={String(color)} /> }} />
       <Tabs.Screen name="movimientos" options={{ title: "Movimientos", tabBarIcon: ({ color }) => <Icon name="ListOrdered" color={String(color)} /> }} />
+      <Tabs.Screen name="graficos" options={{ title: "Gráficos", tabBarIcon: ({ color }) => <Icon name="ChartColumn" color={String(color)} /> }} />
       <Tabs.Screen name="cuentas" options={{ title: "Cuentas", tabBarIcon: ({ color }) => <Icon name="Landmark" color={String(color)} /> }} />
       <Tabs.Screen name="mas" options={{ title: "Más", tabBarIcon: ({ color }) => <Icon name="Ellipsis" color={String(color)} /> }} />
     </Tabs>
