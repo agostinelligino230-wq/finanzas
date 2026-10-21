@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { loadMovementRows } from "./movements";
 
 // Memoria compartida entre pestañas: al volver a una sección se muestra
 // al instante lo último que se cargó, y se actualiza en segundo plano.
@@ -27,8 +28,7 @@ export function currentMonth() {
 export function prefetchAll(userId: string) {
   if (!supabase) return;
   const month = currentMonth();
-  supabase.from("movements").select("*").order("movement_date", { ascending: false }).order("created_at", { ascending: false })
-    .then(({ data, error }) => { if (!error && data) writeCache("raw:movements", userId, data); });
+  loadMovementRows().then(({ data, error }) => { if (!error) writeCache("raw:movements", userId, data); });
   supabase.from("fixed_expenses").select("*").order("created_at", { ascending: false })
     .then(({ data, error }) => { if (!error && data) writeCache("raw:fixed_expenses", userId, data); });
   supabase.from("savings_goals").select("*").order("created_at", { ascending: false })

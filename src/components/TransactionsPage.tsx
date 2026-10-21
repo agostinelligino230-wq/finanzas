@@ -5,6 +5,7 @@ import { CategoryIcon, Card, ErrorBox, MonthPicker, Tabs } from "./ui";
 import { findCategory, useCategories, type Category } from "../lib/categories";
 import { currentMonthISO, dayLabel, money, timeLabel, usd } from "../lib/format";
 import { hasDetail, useMovements, type Movement } from "../lib/movements";
+import { Origin, ReviewCard } from "./ReviewCard";
 
 type Filter = "todos" | "gasto" | "ingreso";
 
@@ -32,7 +33,7 @@ function downloadCsv(rows: Movement[], categories: Category[], fileName: string)
 
 export default function TransactionsPage() {
   const { user } = useAuth();
-  const { movements, error } = useMovements(user.id);
+  const { movements, toReview, error, confirm, remove } = useMovements(user.id);
   const { categories } = useCategories(user.id);
   const [month, setMonth] = useState(currentMonthISO());
   const [filter, setFilter] = useState<Filter>("todos");
@@ -61,6 +62,7 @@ export default function TransactionsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <ErrorBox message={error} />
+      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} />
       <MonthPicker month={month} onChange={setMonth} />
       <Tabs value={filter} onChange={setFilter} options={[{ value: "todos", label: "Todos" }, { value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
       <div className="flex gap-2">
@@ -89,7 +91,7 @@ export default function TransactionsPage() {
                   <CategoryIcon category={category} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold"><span style={{ color: category.color }}>{category.name}</span>{hasDetail(item, category.name) && <span> ({item.description})</span>}</p>
-                    <p className="text-xs text-[var(--muted)]">{timeLabel(item.createdAt)} hs{item.type === "gasto" && !item.paid && " · pendiente de pago"}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}{item.source === "uala" && " · desde Ualá"}</p>
+                    <p className="text-xs text-[var(--muted)]">{timeLabel(item.createdAt)} hs{item.type === "gasto" && !item.paid && " · pendiente de pago"}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}<Origin item={item} /></p>
                   </div>
                   <span className="shrink-0 font-bold tabular-nums" style={{ color: item.type === "ingreso" ? "var(--income)" : "var(--text)" }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</span>
                 </div>

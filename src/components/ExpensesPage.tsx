@@ -11,10 +11,11 @@ import StatementSources from "./StatementSources";
 import { useFixed, type FixedRowView } from "../lib/fixed";
 import { PaySheet, ProviderIcon } from "./sheets";
 import { hasDetail, useMovements, type MovementType } from "../lib/movements";
+import { Origin, ReviewCard } from "./ReviewCard";
 
 export default function ExpensesPage() {
   const { user } = useAuth();
-  const { movements, error, add, togglePaid, remove, reload } = useMovements(user.id);
+  const { movements, toReview, error, add, togglePaid, confirm, remove, reload } = useMovements(user.id);
   const { categories, addCategory } = useCategories(user.id);
   const cardsData = useCards(user.id);
   const [month, setMonth] = useState(currentMonthISO());
@@ -74,6 +75,8 @@ export default function ExpensesPage() {
       </section>
 
       <ErrorBox message={error} />
+
+      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} />
 
       <StatementSources userId={user.id} onlyPending />
 
@@ -156,7 +159,7 @@ export default function ExpensesPage() {
                         ) : <span className="w-8" />}
                         <div className="min-w-0 flex-1">
                           <p className={"truncate text-sm font-medium " + (item.type === "gasto" && !item.paid ? "text-[var(--muted)]" : "")}>{hasDetail(item, category.name) ? item.description : category.name}{item.type === "gasto" && !item.paid && " · pendiente"}</p>
-                          <p className="text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}{item.source === "uala" && " · desde Ualá"}</p>
+                          <p className="text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}<Origin item={item} /></p>
                         </div>
                         <span className="shrink-0 text-sm font-semibold tabular-nums">{money(item.amount)}</span>
                         <button type="button" onClick={() => { if (window.confirm("¿Eliminar este movimiento?")) remove(item); }} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--expense-soft)] hover:text-[var(--expense)]" aria-label="Eliminar"><Trash2 size={16} /></button>

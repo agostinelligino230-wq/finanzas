@@ -3,7 +3,7 @@ import { Check, Mail, Plus, RefreshCw, Search, ShieldCheck } from "lucide-react"
 import { Link } from "react-router-dom";
 import { AUTO_PROVIDERS, KIND_LABELS, PROVIDERS, type Provider } from "../lib/providers";
 import { useCards } from "../lib/cards";
-import { useGmail } from "../lib/gmail";
+import { isInstant, useGmail } from "../lib/gmail";
 import { useAuth } from "./AuthGate";
 import { Card, ErrorBox, sheetLabel as label } from "./ui";
 import { NewCardSheet, ProviderIcon } from "./sheets";
@@ -54,7 +54,7 @@ export default function ConnectPage() {
       <section className="rounded-[28px] bg-[var(--hero)] p-5 text-[var(--hero-text)]">
         <p className="flex items-center gap-2 text-sm opacity-80"><Mail size={16} />Bancos, billeteras y tarjetas</p>
         <p className="mt-1 text-2xl font-bold">Conectá tus cuentas</p>
-        <p className="mt-2 text-sm opacity-80">Conectá tu Gmail y los avisos de tus cuentas se cargan solos todos los días. Las demás las agregás como tarjeta.</p>
+        <p className="mt-2 text-sm opacity-80">Conectá tu Gmail y los avisos de tus cuentas se cargan solos, apenas llegan. Las demás las agregás como tarjeta.</p>
       </section>
 
       <Card className="space-y-4">
@@ -65,6 +65,7 @@ export default function ConnectPage() {
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">Gmail conectado</p>
                 <p className="truncate text-sm text-[var(--muted)]">{link.email ?? "Tu cuenta de Google"}</p>
+                <p className="text-xs text-[var(--muted)]">{isInstant(link) ? <><span className="font-semibold text-[var(--income)]">Al instante</span>: cada aviso entra apenas llega el mail.</> : "Se lee una vez por día y cuando tocás «Actualizar ahora»."}</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[var(--surface-2)] px-3 py-2 text-sm">
