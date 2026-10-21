@@ -8,6 +8,7 @@ import { leerConIA } from "./ia.ts";
 import { entidad, entidadDeMail, entidadDePaquete } from "./entidades.ts";
 import { officialSignature } from "./autenticidad.ts";
 import { day } from "./texto.ts";
+import { avisarApp } from "../avisos.ts";
 import type { Aviso, Lectura, Resumen } from "./tipos.ts";
 import type { Mail } from "../gmail.ts";
 
@@ -75,7 +76,10 @@ export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Co
     type: lectura.tipo, amount: pesos, currency: lectura.moneda, original, rate, description: lectura.descripcion.slice(0, 120), category: lectura.categoria,
     source: ent.id, external_id: externalId, op_ref: lectura.opRef ?? null, date: day(aviso.recibido), datetime: aviso.recibido.toISOString(), trust,
   };
-  return { ...base, leido: true, ...(await ingest(admin, ctx.userId, movement, notice)) };
+  const saved = await ingest(admin, ctx.userId, movement, notice);
+  // Movimiento nuevo por mail: aviso propio de la app (si llegó por notificación, el banco ya avisó).
+  if (saved.estado === "new" && aviso.canal === "mail") await avisarApp(admin, ctx.userId, movement, ent.nombre, aviso.recibido);
+  return { ...base, leido: true, ...saved };
 }
 
 async function ingest(admin: SupabaseClient, userId: string, movement: Record<string, unknown> | null, notice: Record<string, unknown>): Promise<{ estado: Estado; movimiento?: string | null }> {

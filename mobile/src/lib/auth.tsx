@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Session } from "@supabase/supabase-js";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
+import { apagarAvisos } from "./avisos";
 import { supabase, WEB_URL } from "./supabase";
 
 type AuthValue = {
@@ -89,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return code ? exchangeCode(code) : "Google no devolvió el permiso. Probá de nuevo.";
     },
     async signOut() {
+      await apagarAvisos().catch(() => false); // Que a este celular no le lleguen avisos de la cuenta que se va.
       await supabase?.auth.signOut();
     },
   };
