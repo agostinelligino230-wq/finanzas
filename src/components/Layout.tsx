@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, CalendarClock, CreditCard, Home, Landmark, Lightbulb, ListOrdered, LogOut, Menu, Moon, PiggyBank, Sun, X } from "lucide-react";
+import { BarChart3, CalendarClock, CreditCard, Home, Landmark, Lightbulb, ListOrdered, LogOut, Menu, Moon, PiggyBank, Smartphone, Sun, X } from "lucide-react";
 import { useAuth } from "./AuthGate";
 import { prefetchAll } from "../lib/cache";
 
@@ -15,6 +15,13 @@ const items = [
   { to: "/conectar", label: "Conectar cuentas", short: "Cuentas", icon: Landmark },
 ];
 const bottomItems = items.filter((item) => ["/", "/movimientos", "/gastos-fijos", "/tarjetas", "/graficos"].includes(item.to));
+// Aviso para pasar a la app: aparece solo cuando hay enlace de la tienda (en el celular, solo el de su sistema).
+const stores = [
+  { label: "Android", url: import.meta.env.VITE_APP_ANDROID_URL as string | undefined, device: /android/i },
+  { label: "iPhone", url: import.meta.env.VITE_APP_IOS_URL as string | undefined, device: /iphone|ipad|ipod/i },
+];
+const phone = stores.find((store) => store.device.test(navigator.userAgent));
+const appLinks = stores.filter((store) => store.url && (!phone || store === phone));
 
 export default function Layout() {
   const [open, setOpen] = useState(false);
@@ -24,6 +31,9 @@ export default function Layout() {
       const stored = localStorage.getItem("finanzas-theme");
       return stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
     } catch { return false; }
+  });
+  const [appNotice, setAppNotice] = useState(() => {
+    try { return localStorage.getItem("finanzas-aviso-app") !== "cerrado"; } catch { return true; }
   });
   const location = useLocation();
   const active = items.find((item) => (item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to)));
@@ -63,7 +73,19 @@ export default function Layout() {
           <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{active?.label ?? "Finanzas Personales"}</h1>
           <button type="button" onClick={() => setDark((value) => !value)} className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface)]" aria-label={dark ? "Activar tema claro" : "Activar tema oscuro"} title={dark ? "Tema claro" : "Tema oscuro"}>{dark ? <Sun size={20} /> : <Moon size={20} />}</button>
         </header>
-        <main className="px-4 pb-6 sm:px-6 lg:px-8"><Outlet /></main>
+        <main className="px-4 pb-6 sm:px-6 lg:px-8">
+          {appNotice && appLinks.length > 0 && (
+            <div className="mb-4 flex items-center gap-3 rounded-2xl bg-[var(--primary-soft)] p-4 text-sm">
+              <Smartphone size={20} className="shrink-0 text-[var(--primary-text)]" />
+              <p className="min-w-0 flex-1">
+                <span className="font-semibold">Bajá la app.</span> Los movimientos llegan al instante, sin abrir la web.{" "}
+                {appLinks.map((link, index) => <span key={link.label}>{index > 0 && " · "}<a href={link.url} target="_blank" rel="noreferrer" className="font-semibold text-[var(--primary-text)] underline">{link.label}</a></span>)}
+              </p>
+              <button type="button" onClick={() => { setAppNotice(false); try { localStorage.setItem("finanzas-aviso-app", "cerrado"); } catch { /* sin almacenamiento */ } }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface)]" aria-label="Cerrar aviso"><X size={18} /></button>
+            </div>
+          )}
+          <Outlet />
+        </main>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[var(--border)] bg-[var(--surface)] pb-[env(safe-area-inset-bottom)] lg:hidden" aria-label="Navegación principal">
