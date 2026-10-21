@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Alert, Switch, View } from "react-native";
+import { Alert, Platform, Switch, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { AUTO_PROVIDERS } from "../../../../shared/providers";
 import { useAuth } from "../../lib/auth";
 import { isInstant, useGmail, type ConnectResult } from "../../lib/gmail";
+import { disponible as lectorDisponible, useLector } from "../../lib/notificaciones";
 import { useColors } from "../../lib/theme";
 import { Icon } from "../../components/Icon";
 import { StatementSources } from "../../components/statements";
@@ -33,6 +34,8 @@ export default function Accounts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.gmail]);
 
+  const lector = useLector();
+  const lectorActivo = lector.estado.activo && lector.estado.vinculado && !lector.estado.revocado;
   const link = gmail.link;
   const providers = link?.providers ?? AUTO_PROVIDERS.map((provider) => provider.id);
   const toggle = (id: string) => gmail.setProviders(providers.includes(id) ? providers.filter((entry) => entry !== id) : [...providers, id]);
@@ -90,6 +93,22 @@ export default function Accounts() {
         </View>
         {link ? <Button label="Desconectar Gmail" variant="ghost" onPress={disconnect} /> : null}
       </Card>
+
+      {lectorDisponible ? (
+        <Card style={{ gap: 10 }}>
+          <View style={styles.row}>
+            <Icon name="BellRing" size={20} color={lectorActivo ? colors.income : colors.muted} />
+            <T variant="subtitle" style={{ flex: 1 }}>Notificaciones de tus bancos</T>
+          </View>
+          <T variant="small">{lectorActivo ? (lector.estado.escuchando ? "Activadas: cada aviso de tus bancos entra al instante." : "Activadas, esperando que Android conecte el lector.") : "Con las notificaciones activadas, lo que te avisa la app de tu banco se carga solo, en segundos."}</T>
+          <Button label={lectorActivo ? "Ver estado" : "Activar"} variant={lectorActivo ? "secondary" : "primary"} onPress={() => router.push("/notificaciones")} />
+        </Card>
+      ) : Platform.OS === "ios" ? (
+        <Card style={{ gap: 8 }}>
+          <T variant="subtitle">Avisos por mail de tus bancos</T>
+          <T variant="small">En iPhone la app no puede leer las notificaciones de otras apps. Para que todo entre solo: conectá tu Gmail acá arriba y, en la app de cada banco, prendé los avisos por mail de compras, transferencias y plata recibida.</T>
+        </Card>
+      ) : null}
       {link ? <StatementSources userId={userId} /> : null}
     </Screen>
   );
