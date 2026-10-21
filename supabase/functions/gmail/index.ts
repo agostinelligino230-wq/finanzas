@@ -3,7 +3,8 @@
 // GET ?code=…&state=… → vuelve de Google: guarda el permiso, trae los últimos 60 días y vuelve a la app.
 // POST (con sesión)   → "Actualizar ahora" para ese usuario, buscar resúmenes de tarjeta ({accion:"tarjetas"})
 //                        o analizar el PDF de un resumen ({accion:"analizar", fuente, clave?, recordar?, auto?}).
-// POST (sin sesión)   → lo llama el programador diario: actualiza las cuentas que hace más de 20 horas no se leen.
+// POST (con X-Cron-Secret) → lo llama el programador diario: actualiza las cuentas que hace más de 20 horas no se leen.
+// POST sin sesión ni clave → 401: nadie de afuera puede disparar la lectura de las cuentas.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getDocumentProxy } from "npm:unpdf@1.8.1";
 
@@ -11,6 +12,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID") ?? "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "";
+// Clave del programador diario (la misma que guarda Vault como "cron_secret").
+const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+// Con esta clave se cifra la clave del PDF de cada resumen antes de guardarla.
+const PDF_KEY = Deno.env.get("PDF_KEY") ?? "";
 const DEFAULT_APP = "https://finanzas-personales-ar.vercel.app";
 const REDIRECT_URI = SUPABASE_URL + "/functions/v1/gmail";
 const SCOPES = "openid email profile https://www.googleapis.com/auth/gmail.readonly";
@@ -79,7 +84,7 @@ async function syncRequest(req: Request) {
   const body = await req.json().catch(() => ({})) as { accion?: string; interno?: string; fuente?: string; clave?: string; recordar?: boolean; auto?: boolean };
 
   // Análisis automático de un resumen (lo pide la misma función, una vez por tarjeta).
-  if (jwt && jwt === SERVICE_KEY && body.interno === "analizar" && body.fuente) {
+  if (jwt && sameText(jwt, SERVICE_KEY) && body.interno === "analizar" && body.fuente) {
     const { data: source } = await admin.from("statement_sources").select("*").eq("id", body.fuente).maybeSingle();
     if (!source) return json({ error: "no existe" }, 404);
     const { data: row } = await admin.from("gmail_links").select("*").eq("user_id", (source as Source).user_id).maybeSingle();
@@ -87,7 +92,7 @@ async function syncRequest(req: Request) {
     return json(await analyzeSource(row as Link, source as Source));
   }
 
-  const { data: auth } = jwt && jwt !== SERVICE_KEY ? await admin.auth.getUser(jwt) : { data: { user: null } };
+  const { data: auth } = jwt && !sameText(jwt, SERVICE_KEY) ? await admin.auth.getUser(jwt) : { data: { user: null } };
   if (auth?.user) {
     const { data: row } = await admin.from("gmail_links").select("*").eq("user_id", auth.user.id).maybeSingle();
     if (!row) return json({ error: "Gmail no está conectado" }, 404);
@@ -105,7 +110,9 @@ async function syncRequest(req: Request) {
     }
     return json(await syncLink(link));
   }
-  // Programador diario: solo las cuentas que hace más de 20 horas no se leen.
+  // Programador diario: solo con la clave secreta. Sin sesión ni clave no se lee ninguna cuenta.
+  if (!CRON_SECRET || !sameText(req.headers.get("X-Cron-Secret") ?? "", CRON_SECRET)) return json({ error: "No autorizado" }, 401);
+  // Solo las cuentas que hace más de 20 horas no se leen.
   const limit = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
   const { data: rows } = await admin.from("gmail_links").select("*").or("last_sync_at.is.null,last_sync_at.lt." + limit);
   const results = [];
@@ -136,6 +143,15 @@ async function syncLink(link: Link, days?: number) {
   const result = { movimientos: added, resumenes: saved, tarjetas, mails };
   await admin.from("gmail_links").update({ last_sync_at: new Date().toISOString(), last_result: result }).eq("user_id", link.user_id);
   return result;
+}
+
+// Compara dos claves sin cortar en la primera letra distinta (así no se puede adivinar midiendo el tiempo).
+function sameText(a: string, b: string) {
+  const x = new TextEncoder().encode(a);
+  const y = new TextEncoder().encode(b);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
+  return diff === 0;
 }
 
 async function accessToken(refresh: string) {
@@ -715,7 +731,13 @@ async function analyzeSource(link: Link, source: Source, options: { clave?: stri
   const raw = part.body?.data ?? (part.body?.attachmentId ? (await gmailGet(access, "messages/" + source.last_message_id + "/attachments/" + part.body.attachmentId)).data : null);
   if (!raw) return fail("sin-pdf");
 
-  const password = options.clave?.trim() || source.pdf_password || undefined;
+  // Las claves guardadas antes de este cambio están en texto plano: se cifran la primera vez que se usan.
+  const saved = await openPassword(source.pdf_password);
+  if (saved && !source.pdf_password!.startsWith("v1:")) {
+    const sealed = await sealPassword(saved);
+    if (sealed) await admin.from("statement_sources").update({ pdf_password: sealed }).eq("id", source.id);
+  }
+  const password = options.clave?.trim() || saved || undefined;
   let lines: PdfLine[];
   try {
     const pdf = await getDocumentProxy(base64url(raw), password ? { password } : {});
@@ -752,6 +774,7 @@ async function analyzeSource(link: Link, source: Source, options: { clave?: stri
   const pendiente = cuotas.reduce((sum, item) => sum + item.amount * (item.cuota!.m - item.cuota!.n), 0);
   const hasta = cuotas.reduce((max, item) => { const end = monthShift(data.month, item.cuota!.m - item.cuota!.n); return end > max ? end : max; }, "");
   const consumos = data.consumos.filter((item) => item.kind === "consumo");
+  const remember = options.clave && options.recordar ? await sealPassword(options.clave.trim()) : null;
   const result = {
     tarjeta: card.name, mes: data.month, total: data.total, total_usd: data.totalUsd, vence: data.dueDate, minimo: data.minPayment,
     consumos: consumos.length, cargos: Math.round(data.consumos.filter((item) => item.kind === "cargo").reduce((sum, item) => sum + item.amount, 0) * 100) / 100,
@@ -760,7 +783,35 @@ async function analyzeSource(link: Link, source: Source, options: { clave?: stri
   await admin.from("statement_sources").update({
     status: "listo", result, card_id: card.id, analyzed_message_id: source.last_message_id, analyzed_at: new Date().toISOString(),
     ...(options.auto !== undefined ? { auto: options.auto } : {}),
-    ...(options.clave && options.recordar ? { pdf_password: options.clave.trim(), password_saved: true } : {}),
+    ...(remember ? { pdf_password: remember, password_saved: true } : {}),
   }).eq("id", source.id);
   return { ok: true, resultado: result };
+}
+
+// ---------- Clave del PDF: se guarda cifrada (AES-GCM con PDF_KEY), nunca en texto plano ----------
+
+let pdfKey: Promise<CryptoKey> | null = null;
+const cipherKey = () => (pdfKey ??= crypto.subtle.digest("SHA-256", new TextEncoder().encode(PDF_KEY)).then((raw) => crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"])));
+const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+const fromBase64 = (text: string) => Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
+
+// "v1:<iv>:<cifrado>". Sin PDF_KEY no se guarda nada (antes que dejarla en texto plano).
+async function sealPassword(plain: string) {
+  if (!PDF_KEY) { console.error("Falta el secreto PDF_KEY: la clave del PDF no se guarda"); return null; }
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await cipherKey(), new TextEncoder().encode(plain));
+  return "v1:" + toBase64(iv) + ":" + toBase64(new Uint8Array(data));
+}
+
+async function openPassword(stored: string | null) {
+  if (!stored) return null;
+  if (!stored.startsWith("v1:")) return stored;
+  if (!PDF_KEY) return null;
+  try {
+    const [, iv, data] = stored.split(":");
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromBase64(iv) }, await cipherKey(), fromBase64(data));
+    return new TextDecoder().decode(plain);
+  } catch {
+    return null; // Si no se puede abrir, se vuelve a pedir la clave.
+  }
 }
