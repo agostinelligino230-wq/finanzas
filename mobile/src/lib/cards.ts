@@ -6,6 +6,7 @@ import {
 } from "../../../shared/tarjetas";
 import { addLinkedExpense, removeLinkedExpense } from "./obligations";
 import { createStore } from "./store";
+import { useMiCobro } from "./cobro";
 import { toast } from "../components/Toast";
 import { supabase } from "./supabase";
 
@@ -13,6 +14,7 @@ import { supabase } from "./supabase";
 const store = createStore<CardsState & { loaded: boolean }>({ cards: [], items: [], statements: [], payments: [], loaded: false });
 
 export function useCards(userId: string) {
+  const cobro = useMiCobro(userId);
   const state = store.useValue(userId);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -85,7 +87,7 @@ export function useCards(userId: string) {
     const { error: saveError } = await supabase.from("card_payments").upsert({ user_id: userId, card_id: card.id, month, amount }, { onConflict: "card_id,month" });
     if (saveError) return fail("No se pudo marcar la tarjeta como pagada.");
     if (addToExpenses) {
-      const ok = await addLinkedExpense(userId, { externalId: cardExternalId(card.id, month), description: "Resumen " + card.name, amount, category: "tarjeta", date: payDate(month, card.dueDay), source: "tarjeta" });
+      const ok = await addLinkedExpense(userId, { externalId: cardExternalId(card.id, month), description: "Resumen " + card.name, amount, category: "tarjeta", date: payDate(month, card.dueDay, cobro), source: "tarjeta" });
       if (!ok) return fail("Se marcó como pagada, pero no se pudo sumar a tus gastos.");
     }
     setError("");

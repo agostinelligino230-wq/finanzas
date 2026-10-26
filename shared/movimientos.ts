@@ -1,5 +1,6 @@
 // Movimientos: tipos y reglas que comparten la web y la app del celular (qué suma, de dónde vino cada uno).
 import { findProvider } from "./providers";
+import { inCycle, type Cobro } from "./cobro";
 
 export type MovementType = "gasto" | "ingreso";
 export type Currency = "ARS" | "USD";
@@ -55,8 +56,9 @@ export const hasDetail = (item: { description: string }, categoryName: string) =
 };
 
 // Totales de un mes (lo que suma): ingresos, gastos, disponible y lo que falta pagar.
-export function monthTotals(movements: Movement[], month: string) {
-  const items = movements.filter((item) => counts(item) && item.date.startsWith(month));
+// Con día de cobro, el mes va de un cobro al siguiente.
+export function monthTotals(movements: Movement[], month: string, cobro?: Cobro | null) {
+  const items = movements.filter((item) => counts(item) && inCycle(item.date, month, cobro));
   const income = items.filter((item) => item.type === "ingreso").reduce((sum, item) => sum + item.amount, 0);
   const expense = items.filter((item) => item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
   const pending = items.filter((item) => item.type === "gasto" && !item.paid).reduce((sum, item) => sum + item.amount, 0);

@@ -12,12 +12,13 @@ export function CategoryIcon({ category, size = 40 }: { category: Pick<Category,
   );
 }
 
-export function MonthPicker({ month, onChange }: { month: string; onChange: (month: string) => void }) {
+// detail: debajo del mes, por ejemplo «del 5/10 al 4/11» cuando el mes va de un cobro al siguiente.
+export function MonthPicker({ month, onChange, detail }: { month: string; onChange: (month: string) => void; detail?: string }) {
   const button = "flex h-10 w-10 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]";
   return (
     <div className="flex items-center justify-between gap-2 rounded-2xl bg-[var(--surface)] p-1.5">
       <button type="button" className={button} onClick={() => onChange(shiftMonth(month, -1))} aria-label="Mes anterior"><ChevronLeft size={20} /></button>
-      <span className="text-base font-semibold">{monthLabel(month)}</span>
+      <span className="text-center"><span className="block text-base font-semibold">{monthLabel(month)}</span>{detail && <span className="block text-xs text-[var(--muted)]">{detail}</span>}</span>
       <button type="button" className={button} onClick={() => onChange(shiftMonth(month, 1))} aria-label="Mes siguiente"><ChevronRight size={20} /></button>
     </div>
   );

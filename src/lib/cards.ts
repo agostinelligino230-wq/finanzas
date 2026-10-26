@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import { useAuth } from "../components/AuthGate";
 import { readCache, writeCache } from "./cache";
 import { addLinkedExpense, cardExternalId, payDate, removeLinkedExpense } from "./obligations";
 import { cardFromRow, cardItemFromRow as itemFromRow, cardItemToRow, cardPaymentFromRow as paymentFromRow, statementFromRow, withoutCard, type CardItem, type CardItemRow as ItemRow, type CardPaymentRow as PaymentRow, type CardRow, type CardStatementRow as StatementRow, type CardsState as State, type CreditCard } from "../../shared/tarjetas";
@@ -7,6 +8,7 @@ import { cardFromRow, cardItemFromRow as itemFromRow, cardItemToRow, cardPayment
 export { cardMonthSummary, cardsMonthTotal, installmentNumber, itemsForMonth, lastMonth, type CardItem, type CardItemKind, type CardPayment, type CardStatement, type CreditCard, type StatementLine } from "../../shared/tarjetas";
 
 export function useCards(userId: string) {
+  const { cobro } = useAuth();
   const [state, setState] = useState<State>(() => readCache<State>("cards_v3", userId) ?? { cards: [], items: [], statements: [], payments: [] });
   const [error, setError] = useState("");
 
@@ -74,7 +76,7 @@ export function useCards(userId: string) {
     const { error: saveError } = await supabase.from("card_payments").upsert({ user_id: userId, card_id: card.id, month, amount }, { onConflict: "card_id,month" });
     if (saveError) return fail("No se pudo marcar la tarjeta como pagada.");
     if (addToExpenses) {
-      const ok = await addLinkedExpense(userId, { externalId: cardExternalId(card.id, month), description: "Resumen " + card.name, amount, category: "tarjeta", date: payDate(month, card.dueDay), source: "tarjeta" });
+      const ok = await addLinkedExpense(userId, { externalId: cardExternalId(card.id, month), description: "Resumen " + card.name, amount, category: "tarjeta", date: payDate(month, card.dueDay, cobro), source: "tarjeta" });
       if (!ok) return fail("Se marcó como pagada, pero no se pudo sumar a tus gastos.");
     }
     setError("");

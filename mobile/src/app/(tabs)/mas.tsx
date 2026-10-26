@@ -13,6 +13,7 @@ const LINKS: { href: Href; icon: string; title: string; detail: string }[] = [
   { href: "/fijos", icon: "CalendarClock", title: "Fijos y tarjetas", detail: "Lo que pagás todos los meses, cuotas y resúmenes" },
   { href: "/ahorro", icon: "PiggyBank", title: "Ahorro", detail: "Tus metas y cuánto llevás juntado" },
   { href: "/sugerencias", icon: "Lightbulb", title: "Sugerencias", detail: "Una guía para repartir tu ingreso" },
+  { href: "/cobro", icon: "Banknote", title: "Día de cobro", detail: "Desde qué día cuenta «tu mes»" },
 ];
 
 export default function More() {

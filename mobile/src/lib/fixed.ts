@@ -7,6 +7,7 @@ import {
 } from "../../../shared/fijos";
 import { addLinkedExpense, removeLinkedExpense } from "./obligations";
 import { createStore } from "./store";
+import { useMiCobro } from "./cobro";
 import { toast } from "../components/Toast";
 import { supabase } from "./supabase";
 
@@ -15,6 +16,7 @@ const base = createStore<{ items: Fixed[]; changes: AmountChange[]; loaded: bool
 const paid = createStore<FixedPayment[]>([]);
 
 export function useFixed(userId: string, month: string) {
+  const cobro = useMiCobro(userId);
   const payKey = userId + ":" + month;
   const data = base.useValue(userId);
   const payments = paid.useValue(payKey);
@@ -61,7 +63,7 @@ export function useFixed(userId: string, month: string) {
     const { error: saveError } = await supabase.from("fixed_expense_payments").upsert({ user_id: userId, fixed_expense_id: row.item.id, month, amount }, { onConflict: "fixed_expense_id,month" });
     if (saveError) return fail("No se pudo marcar como pagado.");
     if (addToExpenses) {
-      const ok = await addLinkedExpense(userId, { externalId: fixedExternalId(row.item.id, month), description: row.item.name, amount, category: FIXED_EXPENSE_CATEGORY[row.item.category], date: payDate(month, row.item.dueDay), source: "fijo" });
+      const ok = await addLinkedExpense(userId, { externalId: fixedExternalId(row.item.id, month), description: row.item.name, amount, category: FIXED_EXPENSE_CATEGORY[row.item.category], date: payDate(month, row.item.dueDay, cobro), source: "fijo" });
       if (!ok) return fail("Se marcó como pagado, pero no se pudo sumar a tus gastos.");
     }
     setPayments((current) => [...current.filter((entry) => entry.fixedId !== row.item.id), { fixedId: row.item.id, amount }]);

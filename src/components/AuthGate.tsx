@@ -3,8 +3,11 @@ import type { Session, User } from "@supabase/supabase-js";
 import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { clearCache } from "../lib/cache";
+import { cobroFromRow, SIN_DIA, type Cobro, type CobroRow } from "../../shared/cobro";
+import CobroForm from "./CobroForm";
 
-type AuthValue = { user: User; signOut: () => Promise<void> };
+// cobro: el día de cobro de la persona (SIN_DIA = mes de calendario). setCobro: después de cambiarlo.
+type AuthValue = { user: User; signOut: () => Promise<void>; cobro: Cobro; setCobro: (cobro: Cobro) => void };
 const AuthContext = createContext<AuthValue | null>(null);
 
 export function useAuth() {
@@ -211,15 +214,31 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     return () => data.subscription.unsubscribe();
   }, []);
 
+  // Día de cobro: undefined = cargando; null = nunca lo eligió (se le pregunta antes de entrar).
+  const userId = session?.user.id;
+  const [cobro, setCobro] = useState<Cobro | null | undefined>(undefined);
+  useEffect(() => {
+    if (!supabase || !userId) { setCobro(undefined); return; }
+    let active = true;
+    supabase.from("user_settings").select("pay_day, pay_last_business_day").maybeSingle().then(({ data, error }) => {
+      if (!active) return;
+      // Si no se pudo leer (sin conexión, o falta la migración 013), se sigue con el mes de calendario sin trabar la entrada.
+      setCobro(error ? SIN_DIA : data ? cobroFromRow(data as CobroRow) : null);
+    });
+    return () => { active = false; };
+  }, [userId]);
+
   if (!supabase) return <Screen><p className="text-base">Falta configurar la conexión con Supabase (VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY).</p></Screen>;
   if (loading) return <Screen><p className="text-base">Cargando…</p></Screen>;
   if (session && recovery) return <NewPasswordForm onDone={() => setRecovery(false)} />;
   if (!session) return <LoginForm />;
+  if (cobro === undefined) return <Screen><p className="text-base">Cargando…</p></Screen>;
+  if (cobro === null) return <Screen><CobroForm userId={session.user.id} current={null} onSaved={setCobro} /></Screen>;
 
   const signOut = async () => {
     clearCache();
     await supabase?.auth.signOut();
   };
 
-  return <AuthContext.Provider value={{ user: session.user, signOut }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user: session.user, signOut, cobro, setCobro }}>{children}</AuthContext.Provider>;
 }
