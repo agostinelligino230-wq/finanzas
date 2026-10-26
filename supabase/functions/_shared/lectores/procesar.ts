@@ -37,13 +37,14 @@ export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Co
     lectura = leerGenerico(aviso, ent.nombre);
     if (lectura) parser = "generic";
   }
+  const firma = aviso.canal === "mail" ? officialSignature(aviso.autenticacion, ent.dominios) : null;
   // IA de respaldo (con tope e interruptor): notificaciones que nadie leyó y mails que traen un monto.
-  if (lectura === null && (aviso.canal === "push" || CON_MONTO.test(aviso.titulo + " " + aviso.texto))) {
+  // De los mails, solo los firmados por la entidad: uno falso no gasta el cupo ni le habla a la IA.
+  if (lectura === null && (aviso.canal === "push" || (firma && CON_MONTO.test(aviso.titulo + " " + aviso.texto)))) {
     lectura = await leerConIA(admin, aviso, ent.nombre);
     if (lectura) parser = "ai";
   }
 
-  const firma = aviso.canal === "mail" ? officialSignature(aviso.autenticacion, ent.dominios) : null;
   const autentico = aviso.canal === "push" || Boolean(firma);
   const notice = {
     channel: aviso.canal, provider: ent.id, notice_key: aviso.clave, authentic: autentico,
