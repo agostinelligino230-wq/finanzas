@@ -100,8 +100,9 @@ export async function addedSince(access: string, startHistoryId: string) {
 
 function bodyText(payload: Part): string {
   const plain = findPart(payload, "text/plain");
-  if (plain) return decode(plain);
   const html = findPart(payload, "text/html");
+  // Algunos (Wallbit) mandan en texto plano solo el pie y el detalle en el HTML: sin ningún monto, se usa el HTML.
+  if (plain && (!html || /\$|USD|U\$S|ARS/i.test(decode(plain)))) return decode(plain);
   if (!html) return "";
   return decode(html)
     .replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ")
