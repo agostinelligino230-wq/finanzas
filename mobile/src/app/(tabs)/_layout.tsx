@@ -1,4 +1,6 @@
+import { ActivityIndicator, View } from "react-native";
 import { Redirect } from "expo-router";
+import { useCobro } from "../../lib/cobro";
 import { Tabs } from "expo-router/js-tabs";
 import { Icon } from "../../components/Icon";
 import { useAuth } from "../../lib/auth";
@@ -7,7 +9,11 @@ import { useColors } from "../../lib/theme";
 export default function TabsLayout() {
   const { session } = useAuth();
   const colors = useColors();
+  const cobro = useCobro(session?.user.id);
   if (!session) return <Redirect href="/login" />;
+  // Antes de entrar se carga el día de cobro (las pestañas arman «tu mes» con él); si nunca lo eligió, se le pregunta.
+  if (cobro === undefined) return <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}><ActivityIndicator color={colors.primary} /></View>;
+  if (cobro === null) return <Redirect href="/cobro" />;
   return (
     <Tabs
       screenOptions={{

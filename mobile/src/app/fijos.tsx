@@ -2,7 +2,9 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { Redirect, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { currentMonthISO, money, monthLabel, usd } from "../../../shared/format";
+import { money, monthLabel, usd } from "../../../shared/format";
+import { currentCycle } from "../../../shared/cobro";
+import { useMiCobro } from "../lib/cobro";
 import { FIXED_LABELS, type FixedRowView } from "../../../shared/fijos";
 import { cardMonthSummary, installmentNumber, itemsForMonth, lastMonth, type CardItem, type CardPayment, type CardStatement, type CreditCard } from "../../../shared/tarjetas";
 import { useAuth } from "../lib/auth";
@@ -27,7 +29,8 @@ const shortDate = (date: string, month: "long" | "short") => new Date(date + "T1
 
 function FixedAndCards({ userId }: { userId: string }) {
   const colors = useColors();
-  const [month, setMonth] = useState(currentMonthISO());
+  const cobro = useMiCobro(userId);
+  const [month, setMonth] = useState(() => currentCycle(cobro));
   const [tab, setTab] = useState<Tab>("fijos");
   const fixed = useFixed(userId, month);
   const cardsData = useCards(userId);

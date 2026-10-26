@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase";
+import { useAuth } from "../components/AuthGate";
 import { readCache, writeCache } from "./cache";
 import { shiftMonth } from "./format";
 import { addLinkedExpense, fixedExternalId, payDate, removeLinkedExpense } from "./obligations";
@@ -8,6 +9,7 @@ import { FIXED_EXPENSE_CATEGORY as EXPENSE_CATEGORY, amountFromRow, fixedFromRow
 export { FIXED_KINDS, FIXED_LABELS, type Fixed, type FixedInput, type FixedKind, type FixedRowView } from "../../shared/fijos";
 
 export function useFixed(userId: string, month: string) {
+  const { cobro } = useAuth();
   const [items, setItems] = useState<Fixed[]>(() => readCache<Fixed[]>("fixed_v2", userId) ?? (readCache<FixedRow[]>("raw:fixed_expenses", userId) ?? []).map(fixedFromRow));
   const [changes, setChanges] = useState<AmountChange[]>(() => readCache<AmountChange[]>("fixed_amounts", userId) ?? []);
   const [payments, setPayments] = useState<Payment[]>(() => readCache<Payment[]>("payments2:" + month, userId) ?? []);
@@ -57,7 +59,7 @@ export function useFixed(userId: string, month: string) {
     const { error: saveError } = await supabase.from("fixed_expense_payments").upsert({ user_id: userId, fixed_expense_id: row.item.id, month, amount }, { onConflict: "fixed_expense_id,month" });
     if (saveError) return fail("No se pudo marcar como pagado.");
     if (addToExpenses) {
-      const ok = await addLinkedExpense(userId, { externalId: fixedExternalId(row.item.id, month), description: row.item.name, amount, category: EXPENSE_CATEGORY[row.item.category], date: payDate(month, row.item.dueDay), source: "fijo" });
+      const ok = await addLinkedExpense(userId, { externalId: fixedExternalId(row.item.id, month), description: row.item.name, amount, category: EXPENSE_CATEGORY[row.item.category], date: payDate(month, row.item.dueDay, cobro), source: "fijo" });
       if (!ok) return fail("Se marcó como pagado, pero no se pudo sumar a tus gastos.");
     }
     setMonthPayments((current) => [...current.filter((entry) => entry.fixedId !== row.item.id), { fixedId: row.item.id, amount }]);

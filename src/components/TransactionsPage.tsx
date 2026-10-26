@@ -3,7 +3,8 @@ import { Download, Search } from "lucide-react";
 import { useAuth } from "./AuthGate";
 import { CategoryIcon, Card, ErrorBox, MonthPicker, Tabs } from "./ui";
 import { findCategory, useCategories, type Category } from "../lib/categories";
-import { currentMonthISO, dayLabel, money, timeLabel, usd } from "../lib/format";
+import { dayLabel, money, timeLabel, usd } from "../lib/format";
+import { currentCycle, cycleText, inCycle } from "../../shared/cobro";
 import { hasDetail, useMovements, type Movement } from "../lib/movements";
 import { Origin, ReviewCard } from "./ReviewCard";
 
@@ -32,23 +33,23 @@ function downloadCsv(rows: Movement[], categories: Category[], fileName: string)
 }
 
 export default function TransactionsPage() {
-  const { user } = useAuth();
+  const { user, cobro } = useAuth();
   const { movements, toReview, error, confirm, remove } = useMovements(user.id);
   const { categories } = useCategories(user.id);
-  const [month, setMonth] = useState(currentMonthISO());
+  const [month, setMonth] = useState(() => currentCycle(cobro));
   const [filter, setFilter] = useState<Filter>("todos");
   const [query, setQuery] = useState("");
 
   const visible = useMemo(() => {
     const text = query.trim().toLowerCase();
     return movements.filter((item) => {
-      if (!item.date.startsWith(month)) return false;
+      if (!inCycle(item.date, month, cobro)) return false;
       if (filter !== "todos" && item.type !== filter) return false;
       if (!text) return true;
       const category = findCategory(categories, item.type, item.category);
       return item.description.toLowerCase().includes(text) || category.name.toLowerCase().includes(text);
     });
-  }, [movements, month, filter, query, categories]);
+  }, [movements, month, filter, query, categories, cobro]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, Movement[]>();
@@ -63,7 +64,7 @@ export default function TransactionsPage() {
     <div className="mx-auto max-w-3xl space-y-4">
       <ErrorBox message={error} />
       <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} />
-      <MonthPicker month={month} onChange={setMonth} />
+      <MonthPicker month={month} detail={cycleText(month, cobro)} onChange={setMonth} />
       <Tabs value={filter} onChange={setFilter} options={[{ value: "todos", label: "Todos" }, { value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
       <div className="flex gap-2">
         <label className="flex h-12 flex-1 items-center gap-2 rounded-2xl bg-[var(--surface)] px-4">

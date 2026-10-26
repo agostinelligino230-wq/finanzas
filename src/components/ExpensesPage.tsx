@@ -5,7 +5,8 @@ import { useAuth } from "./AuthGate";
 import AddMovementSheet from "./AddMovementSheet";
 import { CategoryIcon, Card, ErrorBox, MonthPicker, StackedBar, Tabs } from "./ui";
 import { findCategory, useCategories } from "../lib/categories";
-import { currentMonthISO, dayLabel, monthLabel, money, timeLabel, usd } from "../lib/format";
+import { dayLabel, monthLabel, money, timeLabel, usd } from "../lib/format";
+import { currentCycle, cycleText, inCycle } from "../../shared/cobro";
 import { cardMonthSummary, useCards, type CreditCard } from "../lib/cards";
 import StatementSources from "./StatementSources";
 import { useFixed, type FixedRowView } from "../lib/fixed";
@@ -14,18 +15,18 @@ import { hasDetail, useMovements, type MovementType } from "../lib/movements";
 import { Origin, ReviewCard } from "./ReviewCard";
 
 export default function ExpensesPage() {
-  const { user } = useAuth();
+  const { user, cobro } = useAuth();
   const { movements, toReview, error, add, togglePaid, confirm, remove, reload } = useMovements(user.id);
   const { categories, addCategory } = useCategories(user.id);
   const cardsData = useCards(user.id);
-  const [month, setMonth] = useState(currentMonthISO());
+  const [month, setMonth] = useState(() => currentCycle(cobro));
   const [tab, setTab] = useState<MovementType>("gasto");
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const fixed = useFixed(user.id, month);
   const [paying, setPaying] = useState<{ kind: "fijo"; row: FixedRowView } | { kind: "tarjeta"; card: CreditCard; amount: number } | null>(null);
 
-  const monthItems = useMemo(() => movements.filter((item) => item.date.startsWith(month)), [movements, month]);
+  const monthItems = useMemo(() => movements.filter((item) => inCycle(item.date, month, cobro)), [movements, month, cobro]);
   const income = monthItems.filter((item) => item.type === "ingreso").reduce((sum, item) => sum + item.amount, 0);
   const expense = monthItems.filter((item) => item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
   const available = income - expense;
@@ -112,7 +113,7 @@ export default function ExpensesPage() {
         </Card>
       )}
 
-      <MonthPicker month={month} onChange={(value) => { setMonth(value); setOpen(null); }} />
+      <MonthPicker month={month} detail={cycleText(month, cobro)} onChange={(value) => { setMonth(value); setOpen(null); }} />
       <Tabs value={tab} onChange={(value) => { setTab(value); setOpen(null); }} options={[{ value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
 
       <Card>

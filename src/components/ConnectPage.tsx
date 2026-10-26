@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Mail, Plus, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { CalendarDays, Check, Mail, Plus, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AUTO_PROVIDERS, KIND_LABELS, PROVIDERS, type Provider } from "../lib/providers";
 import { useCards } from "../lib/cards";
@@ -8,6 +8,8 @@ import { useAuth } from "./AuthGate";
 import { Card, ErrorBox, sheetLabel as label } from "./ui";
 import { NewCardSheet, ProviderIcon } from "./sheets";
 import StatementSources from "./StatementSources";
+import CobroForm from "./CobroForm";
+import { cobroText, currentCycle, cycleText } from "../../shared/cobro";
 
 const RETURN_MESSAGES: Record<string, { text: string; ok: boolean }> = {
   ok: { text: "¡Listo! Tu Gmail quedó conectado y ya trajimos tus últimos movimientos. Abajo te preguntamos si analizamos los resúmenes de tus tarjetas.", ok: true },
@@ -17,7 +19,8 @@ const RETURN_MESSAGES: Record<string, { text: string; ok: boolean }> = {
 };
 
 export default function ConnectPage() {
-  const { user } = useAuth();
+  const { user, cobro, setCobro } = useAuth();
+  const [editingCobro, setEditingCobro] = useState(false);
   const cardsData = useCards(user.id);
   const gmail = useGmail(user.id);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
@@ -56,6 +59,19 @@ export default function ConnectPage() {
         <p className="mt-1 text-2xl font-bold">Conectá tus cuentas</p>
         <p className="mt-2 text-sm opacity-80">Conectá tu Gmail y los avisos de tus cuentas se cargan solos, apenas llegan. Las demás las agregás como tarjeta.</p>
       </section>
+
+      <Card className="space-y-3">
+        {editingCobro ? <CobroForm userId={user.id} current={cobro} onSaved={(value) => { setCobro(value); setEditingCobro(false); }} /> : (
+          <div className="flex items-center gap-3">
+            <CalendarDays size={20} className="shrink-0 text-[var(--primary-text)]" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Cobrás {cobroText(cobro)}</p>
+              <p className="text-sm text-[var(--muted)]">{cycleText(currentCycle(cobro), cobro) ? "Tu mes de ahora va " + cycleText(currentCycle(cobro), cobro) + "." : "Tus meses van del 1 al último día."}</p>
+            </div>
+            <button type="button" onClick={() => setEditingCobro(true)} className="h-10 shrink-0 rounded-xl border border-[var(--border)] px-3 text-sm font-semibold hover:bg-[var(--surface-2)]">Cambiar</button>
+          </div>
+        )}
+      </Card>
 
       <Card className="space-y-4">
         {link ? (

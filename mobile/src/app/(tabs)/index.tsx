@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
-import { currentMonthISO, monthLabel, money, usd } from "../../../../shared/format";
+import { monthLabel, money, usd } from "../../../../shared/format";
+import { currentCycle, cycleText } from "../../../../shared/cobro";
 import { findCategory } from "../../../../shared/categorias";
 import { hasDetail, monthTotals, type MovementType } from "../../../../shared/movimientos";
 import { useAuth } from "../../lib/auth";
+import { useMiCobro } from "../../lib/cobro";
 import { useCategories } from "../../lib/categories";
 import { useMovements } from "../../lib/movements";
 import { useColors } from "../../lib/theme";
@@ -21,11 +23,12 @@ export default function Home() {
   const colors = useColors();
   const data = useMovements(userId);
   const { categories } = useCategories(userId);
-  const [month, setMonth] = useState(currentMonthISO());
+  const cobro = useMiCobro(userId);
+  const [month, setMonth] = useState(() => currentCycle(cobro));
   const [tab, setTab] = useState<MovementType>("gasto");
   const [open, setOpen] = useState<string | null>(null);
 
-  const totals = useMemo(() => monthTotals(data.movements, month), [data.movements, month]);
+  const totals = useMemo(() => monthTotals(data.movements, month, cobro), [data.movements, month, cobro]);
   const accumulated = data.movements.reduce((sum, item) => sum + (item.type === "ingreso" ? item.amount : -item.amount), 0);
   const dollars = totals.items.filter((item) => item.type === "ingreso" && item.currency === "USD");
   const dollarTotal = dollars.reduce((sum, item) => sum + (item.original ?? 0), 0);
@@ -66,7 +69,7 @@ export default function Home() {
         <StatementSources userId={userId} onlyPending />
         <PendingPayments userId={userId} month={month} available={totals.available} />
 
-        <MonthPicker month={month} onChange={(value) => { setMonth(value); setOpen(null); }} />
+        <MonthPicker month={month} detail={cycleText(month, cobro)} onChange={(value) => { setMonth(value); setOpen(null); }} />
         <Segmented value={tab} onChange={(value) => { setTab(value); setOpen(null); }} options={[{ value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
 
         {known ? <Card style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>

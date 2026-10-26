@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./AuthGate";
 import { CategoryIcon, Card, ErrorBox, Tabs } from "./ui";
 import { findCategory, useCategories } from "../lib/categories";
-import { compactMoney, currentMonthISO, monthLabel, money, shiftMonth, shortMonth } from "../lib/format";
+import { compactMoney, monthLabel, money, shiftMonth, shortMonth } from "../lib/format";
+import { currentCycle, inCycle } from "../../shared/cobro";
 import { useMovements } from "../lib/movements";
 
 type Range = "6" | "12";
@@ -23,11 +24,11 @@ function barPath(x: number, y: number, width: number, height: number) {
 }
 
 export default function ChartsPage() {
-  const { user } = useAuth();
+  const { user, cobro } = useAuth();
   const { movements, error } = useMovements(user.id);
   const { categories } = useCategories(user.id);
   const [range, setRange] = useState<Range>("6");
-  const [selected, setSelected] = useState(currentMonthISO());
+  const [selected, setSelected] = useState(() => currentCycle(cobro));
   const boxRef = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(360);
   useEffect(() => {
@@ -40,17 +41,17 @@ export default function ChartsPage() {
 
   const months = useMemo(() => {
     const count = Number(range);
-    const last = currentMonthISO();
+    const last = currentCycle(cobro);
     return Array.from({ length: count }, (_, index) => shiftMonth(last, index - count + 1));
-  }, [range]);
+  }, [range, cobro]);
 
   const data = useMemo(() => months.map((month) => {
-    const items = movements.filter((item) => item.date.startsWith(month));
+    const items = movements.filter((item) => inCycle(item.date, month, cobro));
     const income = items.filter((item) => item.type === "ingreso").reduce((sum, item) => sum + item.amount, 0);
     const expense = items.filter((item) => item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
     const saving = items.filter((item) => item.type === "gasto" && item.category === "ahorro").reduce((sum, item) => sum + item.amount, 0);
     return { month, income, expense, saving, result: income - expense };
-  }), [months, movements]);
+  }), [months, movements, cobro]);
 
   const max = Math.max(1, ...data.flatMap((row) => [row.income, row.expense, row.saving]));
   const niceMax = (() => { const step = Math.pow(10, Math.floor(Math.log10(max))); return Math.ceil(max / step) * step; })();
@@ -64,10 +65,10 @@ export default function ChartsPage() {
   const current = data.find((row) => row.month === selected) ?? data[data.length - 1];
   const breakdown = useMemo(() => {
     const map = new Map<string, number>();
-    movements.filter((item) => item.type === "gasto" && item.date.startsWith(current.month)).forEach((item) => map.set(item.category, (map.get(item.category) ?? 0) + item.amount));
+    movements.filter((item) => item.type === "gasto" && inCycle(item.date, current.month, cobro)).forEach((item) => map.set(item.category, (map.get(item.category) ?? 0) + item.amount));
     const total = [...map.values()].reduce((sum, value) => sum + value, 0);
     return { total, rows: [...map.entries()].map(([id, value]) => ({ category: findCategory(categories, "gasto", id), value, percent: total > 0 ? (value / total) * 100 : 0 })).sort((a, b) => b.value - a.value) };
-  }, [movements, current.month, categories]);
+  }, [movements, current.month, categories, cobro]);
 
   // Anillo por categoría con 2px de separación entre segmentos
   const donut = (() => {

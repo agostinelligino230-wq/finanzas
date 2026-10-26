@@ -85,12 +85,16 @@ export function Segmented<V extends string>({ value, options, onChange }: { valu
   );
 }
 
-export function MonthPicker({ month, onChange }: { month: string; onChange: (month: string) => void }) {
+// detail: debajo del mes, por ejemplo «del 5/10 al 4/11» cuando el mes va de un cobro al siguiente.
+export function MonthPicker({ month, onChange, detail }: { month: string; onChange: (month: string) => void; detail?: string }) {
   const colors = useColors();
   return (
     <View style={[styles.monthPicker, { backgroundColor: colors.surface }]}>
       <IconButton icon="ChevronLeft" label="Mes anterior" onPress={() => onChange(shiftMonth(month, -1))} />
-      <Text style={[styles.subtitle, { color: colors.text }]}>{monthLabel(month)}</Text>
+      <View style={{ alignItems: "center" }}>
+        <Text style={[styles.subtitle, { color: colors.text }]}>{monthLabel(month)}</Text>
+        {detail ? <Text style={[styles.small, { color: colors.muted }]}>{detail}</Text> : null}
+      </View>
       <IconButton icon="ChevronRight" label="Mes siguiente" onPress={() => onChange(shiftMonth(month, 1))} />
     </View>
   );

@@ -4,13 +4,14 @@ import { Link } from "react-router-dom";
 import { useAuth } from "./AuthGate";
 import { Card, ErrorBox, MonthPicker } from "./ui";
 import { CardItemSheet, NewCardSheet, PaySheet, ProviderIcon, type ItemDraft } from "./sheets";
-import { currentMonthISO, money, monthLabel, usd } from "../lib/format";
+import { money, monthLabel, usd } from "../lib/format";
+import { currentCycle } from "../../shared/cobro";
 import { cardMonthSummary, cardsMonthTotal, installmentNumber, itemsForMonth, lastMonth, useCards, type CreditCard } from "../lib/cards";
 
 export default function CardsPage() {
-  const { user } = useAuth();
+  const { user, cobro } = useAuth();
   const { cards, items, statements, payments, error, addCard, removeCard, saveItem, removeItem, payCard, unpayCard } = useCards(user.id);
-  const [month, setMonth] = useState(currentMonthISO());
+  const [month, setMonth] = useState(() => currentCycle(cobro));
   const [newCard, setNewCard] = useState(false);
   const [draft, setDraft] = useState<ItemDraft | null>(null);
   const [paying, setPaying] = useState<CreditCard | null>(null);

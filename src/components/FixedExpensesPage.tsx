@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { CalendarClock, Check, CreditCard as CardIcon, Home, MoreHorizontal, Plus, Trash2, TrendingDown, TrendingUp, Wifi, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
-import { currentMonthISO, money, monthLabel, parseAmount } from "../lib/format";
+import { money, monthLabel, parseAmount } from "../lib/format";
+import { currentCycle } from "../../shared/cobro";
 import { FIXED_KINDS, FIXED_LABELS, useFixed, type Fixed, type FixedInput, type FixedKind, type FixedRowView } from "../lib/fixed";
 import { cardMonthSummary, installmentNumber, itemsForMonth, lastMonth, useCards, type CreditCard } from "../lib/cards";
 import { useAuth } from "./AuthGate";
@@ -75,8 +76,8 @@ function PaidCheck({ paid, label: text, onClick }: { paid: boolean; label: strin
 type Paying = { kind: "fijo"; row: FixedRowView } | { kind: "tarjeta"; card: CreditCard; amount: number };
 
 export default function FixedExpensesPage() {
-  const { user } = useAuth();
-  const [month, setMonth] = useState(currentMonthISO());
+  const { user, cobro } = useAuth();
+  const [month, setMonth] = useState(() => currentCycle(cobro));
   const fixed = useFixed(user.id, month);
   const cardsData = useCards(user.id);
   const { cards, items, statements, payments } = cardsData;

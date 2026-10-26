@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { currentMonthISO, dayLabel, money } from "../../../../shared/format";
+import { dayLabel, money } from "../../../../shared/format";
+import { currentCycle, cycleText, inCycle } from "../../../../shared/cobro";
 import { findCategory } from "../../../../shared/categorias";
 import type { Movement } from "../../../../shared/movimientos";
 import { useAuth } from "../../lib/auth";
+import { useMiCobro } from "../../lib/cobro";
 import { useCategories } from "../../lib/categories";
 import { useMovements } from "../../lib/movements";
 import { radius, useColors } from "../../lib/theme";
@@ -21,19 +23,20 @@ export default function Movements() {
   const colors = useColors();
   const data = useMovements(userId);
   const { categories } = useCategories(userId);
-  const [month, setMonth] = useState(currentMonthISO());
+  const cobro = useMiCobro(userId);
+  const [month, setMonth] = useState(() => currentCycle(cobro));
   const [filter, setFilter] = useState<Filter>("todos");
   const [query, setQuery] = useState("");
 
   const visible = useMemo(() => {
     const text = query.trim().toLowerCase();
     return data.movements.filter((item) => {
-      if (!item.date.startsWith(month)) return false;
+      if (!inCycle(item.date, month, cobro)) return false;
       if (filter !== "todos" && item.type !== filter) return false;
       if (!text) return true;
       return item.description.toLowerCase().includes(text) || findCategory(categories, item.type, item.category).name.toLowerCase().includes(text);
     });
-  }, [data.movements, month, filter, query, categories]);
+  }, [data.movements, month, filter, query, categories, cobro]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, Movement[]>();
@@ -49,7 +52,7 @@ export default function Movements() {
       <Screen title="Movimientos" refreshing={data.refreshing} onRefresh={data.reload}>
         <ErrorBox message={data.error} onRetry={data.reload} />
         <ReviewList items={data.toReview} onConfirm={data.confirm} onRemove={data.remove} />
-        <MonthPicker month={month} onChange={setMonth} />
+        <MonthPicker month={month} detail={cycleText(month, cobro)} onChange={setMonth} />
         <Segmented value={filter} onChange={setFilter} options={[{ value: "todos", label: "Todos" }, { value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.surface, borderRadius: radius.field, paddingHorizontal: 16, minHeight: 48 }}>
           <Icon name="Search" size={18} color={colors.muted} />

@@ -37,6 +37,7 @@ function Root() {
         <Stack.Screen name="login" />
         <Stack.Screen name="conectar" />
         <Stack.Screen name="notificaciones" />
+        <Stack.Screen name="cobro" />
         <Stack.Screen name="auth" />
       </Stack>
       <Toaster />
