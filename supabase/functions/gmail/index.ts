@@ -543,6 +543,7 @@ async function discoverStatements(access: string, link: Link) {
     const subject = header("subject");
     const files = pdfs.map((part) => part.filename ?? "").join(" ");
     const issuer = issuerOf(from) ?? issuerOf(subject + " " + files);
+    if (!issuer) continue; // De un remitente que no es banco ni tarjeta (por ejemplo, una factura de Internet): no es un resumen.
     const brand = brandOf(subject + " " + files) ?? (issuer && ["amex", "cabal"].includes(issuer[1]) ? null : brandOf(from));
     const domain = (from.match(/@([\w.-]+)/)?.[1] ?? "otro").toLowerCase();
     const key = (issuer?.[1] ?? domain) + ":" + (brand ?? "tarjeta");
@@ -551,6 +552,8 @@ async function discoverStatements(access: string, link: Link) {
     latest.set(key, { user_id: link.user_id, key, label, provider: issuer?.[1] ?? null, brand, last_message_id: item.id, last_mail_at: new Date(Number(message.internalDate)).toISOString(), last_subject: subject.slice(0, 140) });
   }
   if (latest.size) await admin.from("statement_sources").upsert([...latest.values()], { onConflict: "user_id,key" });
+  // Las que se anotaron antes sin banco ni tarjeta reconocidos (y nunca se pudieron leer) se sacan.
+  await admin.from("statement_sources").delete().eq("user_id", link.user_id).is("provider", null).is("card_id", null);
   const { data } = await admin.from("statement_sources").select("*").eq("user_id", link.user_id);
   return (data ?? []) as Source[];
 }
