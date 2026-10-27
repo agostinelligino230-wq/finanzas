@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MOVEMENT_COLUMNS, counts, fromRow, sortMovements, type Movement, type MovementRow, type NewMovement } from "../../../shared/movimientos";
+import { MOVEMENT_COLUMNS, counts, fromRow, rereadErrorMessage, sortMovements, type Movement, type MovementRow, type NewMovement } from "../../../shared/movimientos";
 import { toast } from "../components/Toast";
 import { supabase } from "./supabase";
 
@@ -114,6 +114,20 @@ export function useMovements(userId: string) {
     return true;
   };
 
+  // Volver a leer el mail del que salió, con los lectores de hoy: el servidor corrige monto y descripción.
+  // Devuelve el problema para mostrarlo, o "" si salió bien.
+  const reread = async (item: Movement) => {
+    if (!supabase) return rereadErrorMessage();
+    const { data, error: callError } = await supabase.functions.invoke("gmail", { body: { accion: "releer", movimiento: item.id } });
+    if (callError || data?.error) return rereadErrorMessage(data?.error);
+    const { data: row } = await supabase.from("movements").select(MOVEMENT_COLUMNS).eq("id", item.id).maybeSingle();
+    if (row) {
+      const next = fromRow(row as unknown as MovementRow);
+      set((current) => sortMovements(current.map((entry) => (entry.id === item.id ? next : entry))));
+    }
+    return "";
+  };
+
   const remove = async (item: Movement) => {
     if (!supabase) return;
     const { error: saveError } = await supabase.from("movements").delete().eq("id", item.id);
@@ -121,5 +135,5 @@ export function useMovements(userId: string) {
     set((current) => current.filter((entry) => entry.id !== item.id));
   };
 
-  return { all, loaded, movements, toReview, error, refreshing, add, update, togglePaid, confirm, remove, reload };
+  return { all, loaded, movements, toReview, error, refreshing, add, update, reread, togglePaid, confirm, remove, reload };
 }

@@ -5,7 +5,7 @@ import { LECTORES_MAIL } from "./mail.ts";
 import { LECTORES_PUSH } from "./push.ts";
 import { leerGenerico } from "./generico.ts";
 import { leerConIA } from "./ia.ts";
-import { entidad, entidadDeMail, entidadDePaquete } from "./entidades.ts";
+import { entidad, entidadDeMail, entidadDePaquete, type Entidad } from "./entidades.ts";
 import { officialSignature } from "./autenticidad.ts";
 import { day } from "./texto.ts";
 import { avisarApp } from "../avisos.ts";
@@ -21,17 +21,20 @@ const LECTORES = [...LECTORES_MAIL, ...LECTORES_PUSH];
 const TEXTO_MAXIMO = 20000;
 const CON_MONTO = /(?:\$|US\$|USD|U\$S|ARS)\s?\d/i;
 
-export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Contexto): Promise<Resultado> {
+export type Leido = { ent: Entidad; reconocido: boolean; lectura: Lectura; parser: Parser | null; firma: string | null };
+
+// Qué dice un aviso, sin guardar nada: lector propio, genérico o IA. Lo usan la carga y «Volver a leer».
+// null: no es de ninguna entidad (o la persona no la eligió).
+export async function leerAviso(admin: SupabaseClient, aviso: Aviso, ctx: Pick<Contexto, "nombre" | "proveedores">): Promise<Leido | null> {
   const permitido = (id: string) => !ctx.proveedores || ctx.proveedores.includes(id);
   const lector = LECTORES.find((item) => item.canal === aviso.canal && permitido(item.proveedor) && item.reconoce(aviso));
   const ent = lector ? entidad(lector.proveedor) : aviso.canal === "push" ? entidadDePaquete(aviso.remitente) : entidadDeMail(aviso.remitente, ctx.proveedores);
-  // No es de ninguna entidad (o la persona no la eligió): no se guarda nada.
-  if (!ent) return { estado: "ignored", proveedor: null, reconocido: false, leido: false };
+  if (!ent) return null;
 
   let lectura: Lectura = lector ? lector.leer(aviso, { nombre: ctx.nombre }) : null;
   let parser: Parser | null = lector ? "rule" : null;
-  if (lectura && "resumen" in lectura) return { estado: "discarded", proveedor: ent.id, reconocido: true, leido: true, resumen: lectura.resumen };
   const firma = aviso.canal === "mail" ? officialSignature(aviso.autenticacion, ent.dominios) : null;
+  if (lectura && "resumen" in lectura) return { ent, reconocido: true, lectura, parser, firma };
   // Sin lector propio: las notificaciones de bancos y los mails firmados por la entidad prueban el genérico,
   // que además descarta promociones, códigos y avisos de seguridad (así no gastan la IA).
   // Los mails sin firma quedan como «no reconocido» para escribirles un lector.
@@ -45,6 +48,15 @@ export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Co
     lectura = await leerConIA(admin, aviso, ent.nombre);
     if (lectura) parser = "ai";
   }
+  return { ent, reconocido: Boolean(lector), lectura, parser, firma };
+}
+
+export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Contexto): Promise<Resultado> {
+  const leido = await leerAviso(admin, aviso, ctx);
+  // No es de ninguna entidad (o la persona no la eligió): no se guarda nada.
+  if (!leido) return { estado: "ignored", proveedor: null, reconocido: false, leido: false };
+  const { ent, lectura, parser, firma } = leido;
+  if (lectura && "resumen" in lectura) return { estado: "discarded", proveedor: ent.id, reconocido: true, leido: true, resumen: lectura.resumen };
 
   const autentico = aviso.canal === "push" || Boolean(firma);
   const notice = {
@@ -52,7 +64,7 @@ export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Co
     auth_detail: aviso.canal === "mail" ? { dkim_domain: firma } : { package: aviso.remitente, device_id: aviso.dispositivo ?? null },
     title: aviso.titulo.slice(0, 300), body: aviso.texto.slice(0, TEXTO_MAXIMO), received_at: aviso.recibido.toISOString(), parser,
   };
-  const base = { proveedor: ent.id, reconocido: Boolean(lector) };
+  const base = { proveedor: ent.id, reconocido: leido.reconocido };
 
   if (!lectura) return { ...base, leido: false, ...(await ingest(admin, ctx.userId, null, { ...notice, outcome: "unrecognized" })) };
   if ("descartar" in lectura) return { ...base, leido: false, ...(await ingest(admin, ctx.userId, null, { ...notice, outcome: "discarded", detail: lectura.descartar })) };

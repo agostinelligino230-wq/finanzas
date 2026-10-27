@@ -6,7 +6,7 @@ import { findCategory, useCategories, type Category } from "../lib/categories";
 import { dayLabel, money, timeLabel, usd } from "../lib/format";
 import { currentCycle, cycleText, inCycle } from "../../shared/cobro";
 import { hasDetail, useMovements, type Movement } from "../lib/movements";
-import { Origin, ReviewCard } from "./ReviewCard";
+import { Origin, RereadButton, ReviewCard } from "./ReviewCard";
 
 type Filter = "todos" | "gasto" | "ingreso";
 
@@ -34,7 +34,7 @@ function downloadCsv(rows: Movement[], categories: Category[], fileName: string)
 
 export default function TransactionsPage() {
   const { user, cobro } = useAuth();
-  const { movements, toReview, error, confirm, remove } = useMovements(user.id);
+  const { movements, toReview, error, confirm, reread, remove } = useMovements(user.id);
   const { categories } = useCategories(user.id);
   const [month, setMonth] = useState(() => currentCycle(cobro));
   const [filter, setFilter] = useState<Filter>("todos");
@@ -63,7 +63,7 @@ export default function TransactionsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <ErrorBox message={error} />
-      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} />
+      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} onReread={reread} />
       <MonthPicker month={month} detail={cycleText(month, cobro)} onChange={setMonth} />
       <Tabs value={filter} onChange={setFilter} options={[{ value: "todos", label: "Todos" }, { value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
       <div className="flex gap-2">
@@ -95,6 +95,7 @@ export default function TransactionsPage() {
                     <p className="text-xs text-[var(--muted)]">{timeLabel(item.createdAt)} hs{item.type === "gasto" && !item.paid && " · pendiente de pago"}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}<Origin item={item} /></p>
                   </div>
                   <span className="shrink-0 font-bold tabular-nums" style={{ color: item.type === "ingreso" ? "var(--income)" : "var(--text)" }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</span>
+                  <RereadButton item={item} onReread={reread} />
                 </div>
               );
             })}
