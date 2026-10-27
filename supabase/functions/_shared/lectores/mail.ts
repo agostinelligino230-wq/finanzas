@@ -2,10 +2,17 @@
 // entre la lectura diaria (gmail) y la lectura al instante (gmail-push).
 import type { Aviso, Lector, Lectura } from "./tipos.ts";
 import { amount, isOwn, MONTHS, titleCase } from "./texto.ts";
+import { ENTIDADES } from "./entidades.ts";
 
-// Una sola búsqueda en Gmail para todas las cuentas (Gmail cobra cada búsqueda) y después se separa por remitente y asunto.
-export const BUSQUEDA = '{from:uala.com.ar from:mercadopago from:bna from:macro from:wallbit from:naranjax.com} {subject:"transferencia fue exitosa" subject:"Resumen tarjeta" subject:"Pago aprobado" subject:"Aviso de transferencia" subject:Recibiste subject:"una compra en tu tarjeta"}';
-export const LEIDOS_POR_MAIL = ["uala", "mercadopago", "nacion", "macro", "wallbit", "naranjax"];
+// Dos búsquedas en Gmail para todas las cuentas (Gmail cobra cada búsqueda; los mails repetidos se bajan una vez):
+// 1) los asuntos que leen los lectores de abajo (aunque Gmail los haya mandado a Promociones);
+// 2) todo lo que llega de los dominios oficiales de cada entidad, menos Promociones y Social:
+//    lo que ningún lector reconoce pasa por el genérico y la IA (si el banco lo firmó) y queda «para revisar».
+const REGLAS = '{from:uala.com.ar from:mercadopago from:bna from:macro from:wallbit from:naranjax.com} {subject:"transferencia fue exitosa" subject:"Resumen tarjeta" subject:"Pago aprobado" subject:"Aviso de transferencia" subject:Recibiste subject:"una compra en tu tarjeta"}';
+const DOMINIOS = [...new Set(ENTIDADES.flatMap((item) => item.dominios))];
+const AMPLIA = "{" + DOMINIOS.map((dominio) => "from:" + dominio).join(" ") + "} -category:promotions -category:social";
+export const BUSQUEDA = [REGLAS, AMPLIA];
+export const LEIDOS_POR_MAIL = ENTIDADES.filter((item) => item.dominios.length).map((item) => item.id);
 
 const de = (aviso: Aviso, from: RegExp, subject: RegExp) => from.test(aviso.remitente) && subject.test(aviso.titulo);
 

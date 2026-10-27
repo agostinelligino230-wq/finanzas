@@ -49,11 +49,16 @@ export async function mailHeaders(access: string, id: string) {
   return { id, from: headerOf(headers, "from"), subject: headerOf(headers, "subject"), auth: authOf(headers) };
 }
 
-export async function search(access: string, query: string, days: number, max = 100): Promise<Mail[]> {
-  const list = await gmailGet(access, "messages?maxResults=" + max + "&q=" + encodeURIComponent(query + " newer_than:" + days + "d"));
+// Una o varias búsquedas: cada mail se baja una sola vez aunque aparezca en más de una.
+export async function search(access: string, query: string | string[], days: number, max = 100): Promise<Mail[]> {
+  const ids = new Set<string>();
+  for (const text of Array.isArray(query) ? query : [query]) {
+    const list = await gmailGet(access, "messages?maxResults=" + max + "&q=" + encodeURIComponent(text + " newer_than:" + days + "d"));
+    for (const item of (list.messages ?? []) as { id: string }[]) ids.add(item.id);
+  }
   const mails: Mail[] = [];
-  for (const item of (list.messages ?? []) as { id: string }[]) {
-    const mail = await fullMail(access, item.id);
+  for (const id of ids) {
+    const mail = await fullMail(access, id);
     if (mail) mails.push(mail);
   }
   return mails;
@@ -95,8 +100,9 @@ export async function addedSince(access: string, startHistoryId: string) {
 
 function bodyText(payload: Part): string {
   const plain = findPart(payload, "text/plain");
-  if (plain) return decode(plain);
   const html = findPart(payload, "text/html");
+  // Algunos (Wallbit) mandan en texto plano solo el pie y el detalle en el HTML: sin ningún monto, se usa el HTML.
+  if (plain && (!html || /\$|USD|U\$S|ARS/i.test(decode(plain)))) return decode(plain);
   if (!html) return "";
   return decode(html)
     .replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ")

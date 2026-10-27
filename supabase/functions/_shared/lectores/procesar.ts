@@ -31,13 +31,14 @@ export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Co
   let lectura: Lectura = lector ? lector.leer(aviso, { nombre: ctx.nombre }) : null;
   let parser: Parser | null = lector ? "rule" : null;
   if (lectura && "resumen" in lectura) return { estado: "discarded", proveedor: ent.id, reconocido: true, leido: true, resumen: lectura.resumen };
-  // Las notificaciones de bancos son casi siempre movimientos: si no hay lector propio, prueba el genérico.
-  // Los mails no (traen mucha promoción): quedan como «no reconocido» para escribirles un lector.
-  if (lectura === null && aviso.canal === "push") {
+  const firma = aviso.canal === "mail" ? officialSignature(aviso.autenticacion, ent.dominios) : null;
+  // Sin lector propio: las notificaciones de bancos y los mails firmados por la entidad prueban el genérico,
+  // que además descarta promociones, códigos y avisos de seguridad (así no gastan la IA).
+  // Los mails sin firma quedan como «no reconocido» para escribirles un lector.
+  if (lectura === null && (aviso.canal === "push" || firma)) {
     lectura = leerGenerico(aviso, ent.nombre);
     if (lectura) parser = "generic";
   }
-  const firma = aviso.canal === "mail" ? officialSignature(aviso.autenticacion, ent.dominios) : null;
   // IA de respaldo (con tope e interruptor): notificaciones que nadie leyó y mails que traen un monto.
   // De los mails, solo los firmados por la entidad: uno falso no gasta el cupo ni le habla a la IA.
   if (lectura === null && (aviso.canal === "push" || (firma && CON_MONTO.test(aviso.titulo + " " + aviso.texto)))) {
