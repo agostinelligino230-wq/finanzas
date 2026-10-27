@@ -24,3 +24,28 @@ export async function getDollarQuote(): Promise<DollarQuote | null> {
   if (quote) cached = { at: Date.now(), quote };
   return quote;
 }
+
+// Cotización (compra) de un día ("2026-10-05"), del historial de ArgentinaDatos: para pasar a pesos lo que entró en dólares
+// ese día. Si ese día no tiene (fin de semana o feriado), la del día hábil anterior; si no responde, la de hoy.
+const history = new Map<string, Promise<number | null>>();
+
+export function getDollarRateOn(day: string): Promise<number | null> {
+  let rate = history.get(day);
+  if (!rate) history.set(day, rate = loadRateOn(day));
+  return rate;
+}
+
+async function loadRateOn(day: string) {
+  const start = new Date(day + "T12:00:00Z").getTime();
+  for (let back = 0; back < 5; back++) {
+    const date = new Date(start - back * 86400000).toISOString().slice(0, 10).replace(/-/g, "/");
+    for (const kind of ["cripto", "bolsa"]) {
+      try {
+        const response = await fetch("https://api.argentinadatos.com/v1/cotizaciones/dolares/" + kind + "/" + date);
+        const data = response.ok ? ((await response.json()) as { compra?: number }) : null;
+        if (data?.compra) return Number(data.compra);
+      } catch { /* probar el siguiente */ }
+    }
+  }
+  return (await getDollarQuote())?.buy ?? null;
+}

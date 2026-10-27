@@ -9,6 +9,7 @@ import SuggestionsPage from "./components/SuggestionsPage";
 import FixedExpensesPage from "./components/FixedExpensesPage";
 import CardsPage from "./components/CardsPage";
 import ConnectPage from "./components/ConnectPage";
+import ImportPage from "./components/ImportPage";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<ExpensesPage />} />
           <Route path="movimientos" element={<TransactionsPage />} />
+          <Route path="importar" element={<ImportPage />} />
           <Route path="graficos" element={<ChartsPage />} />
           <Route path="gastos-fijos" element={<FixedExpensesPage />} />
           <Route path="tarjetas" element={<CardsPage />} />

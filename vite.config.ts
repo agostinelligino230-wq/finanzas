@@ -27,7 +27,11 @@ export default defineConfig({
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: { navigateFallback: '/index.html', cleanupOutdatedCaches: true, skipWaiting: true, clientsClaim: true },
+      // El lector de Excel (xlsx) se baja recién al importar un archivo: no se precarga para todos.
+      workbox: {
+        navigateFallback: '/index.html', cleanupOutdatedCaches: true, skipWaiting: true, clientsClaim: true,
+        manifestTransforms: [async (entries) => ({ manifest: entries.filter((entry) => !/\/xlsx-[^/]*\.js$/.test(entry.url)), warnings: [] })],
+      },
     }),
   ],
 });

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Download, Search } from "lucide-react";
+import { Download, Search, Upload } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useAuth } from "./AuthGate";
 import { CategoryIcon, Card, ErrorBox, MonthPicker, Tabs } from "./ui";
 import { findCategory, useCategories, type Category } from "../lib/categories";
@@ -71,6 +72,7 @@ export default function TransactionsPage() {
           <Search size={18} className="text-[var(--muted)]" />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por categoría o detalle" className="w-full bg-transparent text-base outline-none" />
         </label>
+        <Link to="/importar" className="flex h-12 items-center gap-2 rounded-2xl bg-[var(--surface)] px-4 font-semibold" title="Importar el archivo de movimientos de tu banco o billetera"><Upload size={18} /><span className="hidden sm:inline">Importar</span></Link>
         <button type="button" onClick={() => downloadCsv(visible, categories, "movimientos-" + month + ".csv")} disabled={visible.length === 0} className="flex h-12 items-center gap-2 rounded-2xl bg-[var(--surface)] px-4 font-semibold disabled:opacity-50" title="Descargar en Excel / CSV"><Download size={18} /><span className="hidden sm:inline">Descargar</span></button>
       </div>
 
