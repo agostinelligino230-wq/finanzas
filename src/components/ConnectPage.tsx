@@ -10,6 +10,7 @@ import { NewCardSheet, ProviderIcon } from "./sheets";
 import StatementSources from "./StatementSources";
 import CobroForm from "./CobroForm";
 import { cobroText, currentCycle, cycleText } from "../../shared/cobro";
+import { rereadText } from "../../shared/movimientos";
 
 const RETURN_MESSAGES: Record<string, { text: string; ok: boolean }> = {
   ok: { text: "¡Listo! Tu Gmail quedó conectado y ya trajimos tus últimos movimientos. Abajo te preguntamos si analizamos los resúmenes de tus tarjetas.", ok: true },
@@ -24,6 +25,7 @@ export default function ConnectPage() {
   const cardsData = useCards(user.id);
   const gmail = useGmail(user.id);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+  const [rereading, setRereading] = useState(false);
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState<Provider | null>(null);
   const [added, setAdded] = useState("");
@@ -47,6 +49,12 @@ export default function ConnectPage() {
   const refresh = async () => {
     const result = await gmail.refresh();
     if (result) setNotice({ text: result.movimientos ? "Actualizado: " + result.movimientos + (result.movimientos === 1 ? " movimiento nuevo." : " movimientos nuevos.") : "Actualizado: no había movimientos nuevos.", ok: true });
+  };
+  const rereadAll = async () => {
+    setRereading(true);
+    const result = await gmail.refresh(true);
+    setRereading(false);
+    if (result) setNotice({ text: rereadText(result), ok: true });
   };
 
   return (
@@ -86,7 +94,11 @@ export default function ConnectPage() {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[var(--surface-2)] px-3 py-2 text-sm">
               <span className="text-[var(--muted)]">{link.last_sync_at ? "Última lectura: " + new Date(link.last_sync_at).toLocaleString("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Todavía no se leyó"}{link.last_result?.movimientos ? " · " + link.last_result.movimientos + " nuevos" : ""}</span>
-              <button type="button" disabled={gmail.busy} onClick={refresh} className="inline-flex items-center gap-1.5 font-semibold text-[var(--primary-text)] disabled:opacity-60"><RefreshCw size={15} className={gmail.busy ? "animate-spin" : ""} />{gmail.busy ? "Leyendo…" : "Actualizar ahora"}</button>
+              <button type="button" disabled={gmail.busy} onClick={refresh} className="inline-flex items-center gap-1.5 font-semibold text-[var(--primary-text)] disabled:opacity-60"><RefreshCw size={15} className={gmail.busy && !rereading ? "animate-spin" : ""} />{gmail.busy && !rereading ? "Leyendo…" : "Actualizar ahora"}</button>
+            </div>
+            <div className="space-y-1 px-1 text-sm">
+              <button type="button" disabled={gmail.busy} onClick={rereadAll} className="inline-flex items-center gap-1.5 font-semibold text-[var(--primary-text)] disabled:opacity-60"><RefreshCw size={15} className={rereading ? "animate-spin" : ""} />{rereading ? "Leyendo todo tu Gmail…" : "Volver a leer todo Gmail"}</button>
+              <p className="text-xs text-[var(--muted)]">Lee de nuevo los últimos 60 días con los lectores de hoy: corrige lo que ya entró (menos lo que confirmaste o corregiste vos) y suma lo que falte. Puede tardar un minuto.</p>
             </div>
           </>
         ) : (

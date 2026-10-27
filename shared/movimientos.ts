@@ -46,6 +46,16 @@ export function rereadErrorMessage(code?: string) {
   return "No se pudo volver a leer el mail. Probá en un rato.";
 }
 
+// Lo que contesta «Volver a leer todo Gmail»: "Listo: releímos los últimos 60 días. 3 movimientos nuevos y 1 corregido."
+export function rereadText(result: { movimientos?: number; corregidos?: number }) {
+  const count = (n: number, one: string, many: string) => n + " " + (n === 1 ? one : many);
+  const parts = [
+    result.movimientos ? count(result.movimientos, "movimiento nuevo", "movimientos nuevos") : "",
+    result.corregidos ? count(result.corregidos, "corregido", "corregidos") : "",
+  ].filter(Boolean);
+  return parts.length ? "Listo: releímos los últimos 60 días. " + parts.join(" y ") + "." : "Listo: releímos los últimos 60 días y estaba todo al día.";
+}
+
 // Lo dudoso no suma (ni al saldo, ni a los gráficos, ni a la descarga) hasta que lo confirmes.
 export const counts = (item: Movement) => item.trust !== "doubtful" || item.confirmedAt !== null;
 

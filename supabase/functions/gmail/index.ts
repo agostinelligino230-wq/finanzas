@@ -3,16 +3,17 @@
 // GET ?code=…&state=… → vuelve de Google: guarda el permiso, trae los últimos 60 días, pide el aviso al instante y vuelve a la app.
 // POST (con sesión)   → "Actualizar ahora" para ese usuario, buscar resúmenes de tarjeta ({accion:"tarjetas"}),
 //                        analizar el PDF de un resumen ({accion:"analizar", fuente, clave?, recordar?, auto?}),
-//                        volver a leer el mail de un movimiento ({accion:"releer", movimiento})
+//                        volver a leer el mail de un movimiento ({accion:"releer", movimiento}),
+//                        volver a leer todo Gmail, los últimos 60 días ({accion:"releer-todo"})
 //                        o desconectar Gmail ({accion:"desconectar"}).
 // POST (con X-Cron-Secret) → lo llama el programador diario: actualiza las cuentas que hace más de 20 horas no se leen
 //                        y renueva el aviso al instante (vence a los 7 días). Es la red de seguridad de gmail-push.
 // POST sin sesión ni clave → 401: nadie de afuera puede disparar la lectura de las cuentas.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getDocumentProxy } from "npm:unpdf@1.8.1";
-import { accessToken, base64url, fullMail, gmailGet, search, stopWatch, watch } from "../_shared/gmail.ts";
+import { accessToken, base64url, fullMail, gmailGet, searchIds, stopWatch, watch, type Mail } from "../_shared/gmail.ts";
 import { BUSQUEDA, LEIDOS_POR_MAIL } from "../_shared/lectores/mail.ts";
-import { avisoDeMail, cotizacionUnaVez, leerAviso, procesarAviso } from "../_shared/lectores/procesar.ts";
+import { avisoDeMail, cotizacionPorDia, leerAviso, procesarAviso, type Leido } from "../_shared/lectores/procesar.ts";
 import type { Resumen } from "../_shared/lectores/tipos.ts";
 import { day } from "../_shared/lectores/texto.ts";
 
@@ -89,7 +90,7 @@ async function callback(url: URL) {
   const { error } = await admin.from("gmail_links").upsert(link, { onConflict: "user_id" });
   if (error) return back("error");
   const { data: row } = await admin.from("gmail_links").select("*").eq("user_id", saved.user_id).single();
-  await syncLink(row as Link, 60);
+  await syncLink(row as Link, { days: 60 });
   return back("ok");
 }
 
@@ -123,6 +124,7 @@ async function syncRequest(req: Request) {
       return json(await analyzeSource(link, source as Source, { clave: body.clave, recordar: body.recordar, auto: body.auto }));
     }
     if (body.accion === "releer" && body.movimiento) return json(await rereadMovement(link, body.movimiento));
+    if (body.accion === "releer-todo") return json(await syncLink(link, { days: 60, releer: true }));
     if (body.accion === "desconectar") return json(await disconnect(link));
     return json(await syncLink(link));
   }
@@ -138,15 +140,20 @@ async function syncRequest(req: Request) {
   return json({ cuentas: results.length });
 }
 
-async function syncLink(link: Link, days?: number) {
+// Cada lectura mira por lo menos un mes de cobro entero (y unos días): si alguna se salteó un mail, la próxima lo encuentra.
+// Los mails ya leídos no se vuelven a bajar, así que mirar el mes entero no cuesta más.
+const MES = 35;
+
+// releer: «Volver a leer todo Gmail» (los ya leídos también se leen de nuevo con los lectores de hoy).
+async function syncLink(link: Link, options: { days?: number; releer?: boolean } = {}) {
   const since = link.last_sync_at ? Math.ceil((Date.now() - new Date(link.last_sync_at).getTime()) / 86400000) + 2 : 60;
-  const window = days ?? Math.min(60, Math.max(3, since));
+  const window = options.days ?? Math.min(60, Math.max(MES, since));
   const access = await accessToken(link.refresh_token);
   if (!access) {
     await admin.from("gmail_links").update({ last_result: { error: "permiso" } }).eq("user_id", link.user_id);
     return { error: "permiso" };
   }
-  const { added, statements, mails } = await readMails(access, link, window);
+  const { added, fixed, statements, mails } = await readMails(access, link, window, options.releer ?? false);
   const saved = await saveStatements(link.user_id, statements);
   await renewWatch(access, link);
   // Resúmenes de tarjeta en PDF: se anotan los nuevos y se analizan solos los que autorizaste.
@@ -156,7 +163,7 @@ async function syncLink(link: Link, days?: number) {
     tarjetas = sources.filter((source) => !source.dismissed).length;
     await analyzeInBackground(sources);
   } catch (error) { console.error("tarjetas", error); }
-  const result = { movimientos: added, resumenes: saved, tarjetas, mails };
+  const result = { movimientos: added, ...(options.releer ? { corregidos: fixed } : {}), resumenes: saved, tarjetas, mails };
   await admin.from("gmail_links").update({ last_sync_at: new Date().toISOString(), last_result: result }).eq("user_id", link.user_id);
   return result;
 }
@@ -173,32 +180,77 @@ function sameText(a: string, b: string) {
 // ---------- Lectura de mails ----------
 
 // Una sola búsqueda en Gmail para todas las cuentas; cada mail entra por la misma puerta que el aviso al instante.
-async function readMails(access: string, link: Link, days: number) {
+// Los ya leídos se saltean. Con releer se leen todos de nuevo: lo cargado se corrige con los lectores de hoy
+// (menos lo que ya confirmaste o corregiste a mano) y lo que no se había reconocido se prueba otra vez.
+async function readMails(access: string, link: Link, days: number, releer: boolean) {
   const providers = link.providers ?? [];
-  const all = LEIDOS_POR_MAIL.some((id) => providers.includes(id)) ? await search(access, BUSQUEDA, days, 300) : [];
-  const ctx = { userId: link.user_id, nombre: link.name, proveedores: providers, cotizacion: cotizacionUnaVez() };
+  const ids = LEIDOS_POR_MAIL.some((id) => providers.includes(id)) ? await searchIds(access, BUSQUEDA, days, 300) : [];
+  const seen = await seenMails(link.user_id, ids);
+  const ctx = { userId: link.user_id, nombre: link.name, proveedores: providers, cotizacion: cotizacionPorDia() };
   const statements: Statement[] = [];
   // Cuántos mails se encontraron por cuenta y cuántos se leyeron (para saber si algo no se está leyendo).
   const mails: Record<string, { mails: number; leidos: number }> = {};
-  let added = 0;
-  for (const mail of all) {
-    const result = await procesarAviso(admin, avisoDeMail(mail), ctx);
-    if (result.resumen) statements.push(result.resumen);
-    if (result.estado === "new") added++;
-    if (!result.proveedor || !result.reconocido) continue;
-    const entry = (mails[result.proveedor] ??= { mails: 0, leidos: 0 });
+  const tally = (provider: string, leido: boolean) => {
+    const entry = (mails[provider] ??= { mails: 0, leidos: 0 });
     entry.mails++;
-    if (result.leido) entry.leidos++;
+    if (leido) entry.leidos++;
+  };
+  let added = 0;
+  let fixed = 0;
+  for (const known of seen.values()) if (!releer && known.provider && known.parser === "rule") tally(known.provider, Boolean(known.movement_id));
+
+  // Se bajan de a 10 a la vez (Gmail lo permite) y se procesan de a uno.
+  const pending = ids.filter((id) => releer || !seen.has(id));
+  for (let i = 0; i < pending.length; i += 10) {
+    const batch = await Promise.all(pending.slice(i, i + 10).map((id) => fullMail(access, id)));
+    for (const mail of batch) {
+      if (!mail) continue;
+      const known = seen.get(mail.id);
+      if (known?.movement_id) {
+        if (known.confirmed) continue;
+        const leido = await leerAviso(admin, avisoDeMail(mail), ctx);
+        const done = await applyReading(link.user_id, known.movement_id, leido, mail, ctx.cotizacion, known.id);
+        if ("cambio" in done && done.cambio) fixed++;
+        continue;
+      }
+      // Ya visto sin movimiento (no se reconoció o se descartó): se borra ese registro para leerlo de nuevo.
+      if (known?.id) await admin.from("incoming_notices").delete().eq("id", known.id).eq("user_id", link.user_id);
+      const result = await procesarAviso(admin, avisoDeMail(mail), ctx);
+      if (result.resumen) statements.push(result.resumen);
+      if (result.estado === "new") added++;
+      if (result.proveedor && result.reconocido) tally(result.proveedor, result.leido);
+    }
   }
-  return { added, statements, mails };
+  return { added, fixed, statements, mails };
+}
+
+type Visto = { id: string | null; movement_id: string | null; provider: string | null; parser: string | null; confirmed: boolean };
+
+// Qué mails de la lista ya se leyeron (registro de avisos) y, de los de antes de ese registro, cuáles ya tienen movimiento.
+async function seenMails(userId: string, ids: string[]) {
+  const seen = new Map<string, Visto>();
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const { data: notices } = await admin.from("incoming_notices").select("id, notice_key, movement_id, provider, parser, movements(confirmed_at)").eq("user_id", userId).eq("channel", "mail").in("notice_key", chunk);
+    type Confirmado = { confirmed_at: string | null };
+    for (const row of (notices ?? []) as unknown as { id: string; notice_key: string; movement_id: string | null; provider: string | null; parser: string | null; movements: Confirmado | Confirmado[] | null }[]) {
+      const movement = Array.isArray(row.movements) ? row.movements[0] : row.movements;
+      seen.set(row.notice_key, { id: row.id, movement_id: row.movement_id, provider: row.provider, parser: row.parser, confirmed: Boolean(movement?.confirmed_at) });
+    }
+    const { data: legacy } = await admin.from("movements").select("id, external_id, source, confirmed_at").eq("user_id", userId).in("external_id", chunk.map((id) => "mail:" + id));
+    for (const row of (legacy ?? []) as { id: string; external_id: string; source: string | null; confirmed_at: string | null }[]) {
+      const id = row.external_id.slice(5);
+      if (!seen.has(id)) seen.set(id, { id: null, movement_id: row.id, provider: row.source, parser: "rule", confirmed: Boolean(row.confirmed_at) });
+    }
+  }
+  return seen;
 }
 
 // ---------- Volver a leer el mail de un movimiento ----------
 // Un mail ya leído no se vuelve a procesar (queda anotado como visto), así que lo que entró con un lector viejo
 // queda como se leyó. Esto lo baja de nuevo de Gmail, lo lee con los lectores de hoy y corrige ese mismo movimiento.
-// La categoría, la fecha y si está confirmado no se tocan.
 async function rereadMovement(link: Link, id: string) {
-  const { data: movement } = await admin.from("movements").select("id, external_id, exchange_rate, op_ref").eq("id", id).eq("user_id", link.user_id).maybeSingle();
+  const { data: movement } = await admin.from("movements").select("id, external_id").eq("id", id).eq("user_id", link.user_id).maybeSingle();
   if (!movement) return { error: "no-existe" };
   const { data: notice } = await admin.from("incoming_notices").select("id, notice_key").eq("user_id", link.user_id).eq("movement_id", id).eq("channel", "mail").order("received_at").limit(1).maybeSingle();
   const externalId = (movement.external_id as string | null) ?? "";
@@ -208,30 +260,39 @@ async function rereadMovement(link: Link, id: string) {
   if (!access) return { error: "permiso" };
   const mail = await fullMail(access, mailId);
   if (!mail) return { error: "sin-mail" };
-
   const leido = await leerAviso(admin, avisoDeMail(mail), { nombre: link.name, proveedores: link.providers });
+  return applyReading(link.user_id, id, leido, mail, cotizacionPorDia(), (notice?.id as string | undefined) ?? null);
+}
+
+// Corrige un movimiento con lo que dice hoy su mail: monto, moneda, tipo y descripción. En dólares, con la cotización
+// del día en que llegó la plata. La categoría, la fecha y si está confirmado no se tocan.
+async function applyReading(userId: string, id: string, leido: Leido | null, mail: Mail, cotizacion: (dia: string) => Promise<number | null>, noticeId: string | null) {
   const lectura = leido?.lectura;
   if (!leido || !lectura || !("tipo" in lectura)) return { error: "no-se-pudo-leer" };
   let pesos = lectura.monto;
   let original: number | null = null;
   let rate: number | null = null;
   if (lectura.moneda === "USD") {
-    // Con la cotización con la que entró, así el monto en pesos no cambia solo porque hoy el dólar está a otro precio.
-    rate = Number(movement.exchange_rate) || await cotizacionUnaVez()();
+    rate = await cotizacion(day(mail.date));
     if (!rate) return { error: "sin-cotizacion" };
     original = lectura.monto;
     pesos = Math.round(lectura.monto * rate * 100) / 100;
   }
   if (!(pesos > 0)) return { error: "no-se-pudo-leer" };
 
+  const { data: current } = await admin.from("movements").select("description, amount, currency, exchange_rate, movement_type, op_ref").eq("id", id).eq("user_id", userId).maybeSingle();
+  if (!current) return { error: "no-existe" };
   const values = {
     description: lectura.descripcion.slice(0, 120), amount: pesos, currency: lectura.moneda, original_amount: original, exchange_rate: rate,
-    movement_type: lectura.tipo, op_ref: (movement.op_ref as string | null) ?? lectura.opRef ?? null,
+    movement_type: lectura.tipo, op_ref: (current.op_ref as string | null) ?? lectura.opRef ?? null,
   };
-  const { error } = await admin.from("movements").update(values).eq("id", id).eq("user_id", link.user_id);
-  if (error) { console.error("releer", error.message); return { error: "no-se-pudo" }; }
-  if (notice) await admin.from("incoming_notices").update({ parser: leido.parser }).eq("id", notice.id);
-  return { ok: true, movimiento: { descripcion: values.description, monto: pesos, moneda: lectura.moneda, original, tipo: lectura.tipo } };
+  const cambio = values.description !== current.description || Number(current.amount) !== pesos || values.currency !== current.currency || values.movement_type !== current.movement_type;
+  if (cambio) {
+    const { error } = await admin.from("movements").update(values).eq("id", id).eq("user_id", userId);
+    if (error) { console.error("releer", error.message); return { error: "no-se-pudo" }; }
+  }
+  if (noticeId) await admin.from("incoming_notices").update({ parser: leido.parser }).eq("id", noticeId);
+  return { ok: true, cambio, movimiento: { descripcion: values.description, monto: pesos, moneda: lectura.moneda, original, tipo: lectura.tipo } };
 }
 
 // ---------- Aviso al instante (Gmail → Pub/Sub → gmail-push) ----------

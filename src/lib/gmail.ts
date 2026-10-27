@@ -37,15 +37,16 @@ export function useGmail(userId: string) {
     window.location.href = import.meta.env.VITE_SUPABASE_URL + "/functions/v1/gmail?start=" + encodeURIComponent(String(data));
   };
 
-  const refresh = async () => {
+  // todo: «Volver a leer todo Gmail» (los últimos 60 días, con los lectores de hoy).
+  const refresh = async (todo = false) => {
     if (!supabase) return null;
     setBusy(true);
     setError("");
-    const { data, error: syncError } = await supabase.functions.invoke("gmail", { body: { ahora: true } });
+    const { data, error: syncError } = await supabase.functions.invoke("gmail", { body: todo ? { accion: "releer-todo" } : { ahora: true } });
     setBusy(false);
     if (syncError || data?.error) { setError(data?.error === "permiso" ? "Google ya no nos deja leer tu Gmail. Volvé a conectarlo." : "No se pudo actualizar. Probá en un rato."); await load(); return null; }
     await load();
-    return data as { movimientos?: number };
+    return data as { movimientos?: number; corregidos?: number };
   };
 
   // El servidor corta el aviso al instante, le devuelve el permiso a Google y borra la conexión.

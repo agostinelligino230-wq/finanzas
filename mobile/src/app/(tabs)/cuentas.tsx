@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Switch, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { rereadText } from "../../../../shared/movimientos";
 import { AUTO_PROVIDERS } from "../../../../shared/providers";
 import { useAuth } from "../../lib/auth";
 import { activarAvisos, apagarAvisos, avisosDisponibles, useAvisos } from "../../lib/avisos";
@@ -28,6 +29,7 @@ export default function Accounts() {
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const avisos = useAvisos();
   const [avisosBusy, setAvisosBusy] = useState(false);
+  const [rereading, setRereading] = useState(false);
 
   // Vuelta de Google como enlace a la app (finanzas://conectar?gmail=…).
   useEffect(() => {
@@ -51,6 +53,12 @@ export default function Accounts() {
   const refresh = async () => {
     const result = await gmail.refresh();
     if (result) setNotice({ text: result.movimientos ? "Actualizado: " + result.movimientos + (result.movimientos === 1 ? " movimiento nuevo." : " movimientos nuevos.") : "Actualizado: no había movimientos nuevos.", ok: true });
+  };
+  const rereadAll = async () => {
+    setRereading(true);
+    const result = await gmail.refresh(true);
+    setRereading(false);
+    if (result) setNotice({ text: rereadText(result), ok: true });
   };
   const toggleAvisos = async (on: boolean) => {
     setAvisosBusy(true);
@@ -81,7 +89,11 @@ export default function Accounts() {
             </View>
             <T variant="small">{isInstant(link) ? "Al instante: cada aviso entra apenas llega el mail." : "Se lee una vez por día y cuando tocás «Actualizar ahora»."}</T>
             <T variant="small">{link.last_sync_at ? "Última lectura: " + new Date(link.last_sync_at).toLocaleString("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Todavía no se leyó"}</T>
-            <Button label={gmail.busy ? "Leyendo…" : "Actualizar ahora"} icon="RefreshCw" variant="soft" onPress={refresh} busy={gmail.busy} />
+            <Button label={gmail.busy && !rereading ? "Leyendo…" : "Actualizar ahora"} icon="RefreshCw" variant="soft" onPress={refresh} busy={gmail.busy && !rereading} disabled={gmail.busy} />
+            <View style={{ gap: 2 }}>
+              <Button label={rereading ? "Leyendo todo tu Gmail…" : "Volver a leer todo Gmail"} icon="RefreshCw" variant="ghost" onPress={rereadAll} busy={rereading} disabled={gmail.busy} style={{ alignSelf: "flex-start", paddingHorizontal: 0 }} />
+              <T variant="small">Lee de nuevo los últimos 60 días con los lectores de hoy: corrige lo que ya entró (menos lo que confirmaste o corregiste vos) y suma lo que falte. Puede tardar un minuto.</T>
+            </View>
             {avisosDisponibles ? <View style={[styles.row, { minHeight: 48 }]}>
               <View style={{ flex: 1 }}>
                 <T style={{ fontWeight: "600" }}>Avisarme en el celular</T>

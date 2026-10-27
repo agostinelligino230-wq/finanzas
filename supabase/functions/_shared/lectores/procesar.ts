@@ -13,7 +13,7 @@ import type { Aviso, Lectura, Resumen } from "./tipos.ts";
 import type { Mail } from "../gmail.ts";
 
 export type Estado = "new" | "merged" | "repeated" | "discarded" | "unrecognized" | "error" | "ignored";
-export type Contexto = { userId: string; nombre: string | null; proveedores?: string[] | null; cotizacion: () => Promise<number | null> };
+export type Contexto = { userId: string; nombre: string | null; proveedores?: string[] | null; cotizacion: (dia: string) => Promise<number | null> };
 export type Resultado = { estado: Estado; proveedor: string | null; reconocido: boolean; leido: boolean; resumen?: Resumen; movimiento?: string | null };
 type Parser = "rule" | "generic" | "ai";
 
@@ -70,12 +70,12 @@ export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Co
   if ("descartar" in lectura) return { ...base, leido: false, ...(await ingest(admin, ctx.userId, null, { ...notice, outcome: "discarded", detail: lectura.descartar })) };
   if (!("tipo" in lectura)) return { ...base, estado: "error", leido: false };
 
-  // En dólares: "amount" se guarda en pesos con la cotización del momento (como siempre).
+  // En dólares: "amount" se guarda en pesos con la cotización del día en que llegó la plata.
   let pesos = lectura.monto;
   let original: number | null = null;
   let rate: number | null = null;
   if (lectura.moneda === "USD") {
-    rate = await ctx.cotizacion();
+    rate = await ctx.cotizacion(day(aviso.recibido));
     if (!rate) return { ...base, estado: "error", leido: false }; // Sin cotización no se guarda: se lee en la próxima.
     original = lectura.monto;
     pesos = Math.round(lectura.monto * rate * 100) / 100;
@@ -107,14 +107,42 @@ async function ingest(admin: SupabaseClient, userId: string, movement: Record<st
 
 export const avisoDeMail = (mail: Mail): Aviso => ({ canal: "mail", clave: mail.id, remitente: mail.from, titulo: mail.subject, texto: mail.text, recibido: mail.date, autenticacion: mail.auth });
 
-// Cotización del dólar (compra) para los ingresos en US$. Se busca una sola vez por lectura.
-export function cotizacionUnaVez() {
-  let pending: Promise<number | null> | null = null;
-  return () => (pending ??= dollarRate());
+// Cotización del dólar (compra) del día en que llegó la plata, para los ingresos en US$. Una búsqueda por día y por lectura.
+export function cotizacionPorDia() {
+  const pending = new Map<string, Promise<number | null>>();
+  return (dia: string) => {
+    let rate = pending.get(dia);
+    if (!rate) pending.set(dia, rate = dollarRate(dia));
+    return rate;
+  };
 }
 
-async function dollarRate() {
-  for (const kind of ["cripto", "bolsa"]) {
+const KINDS = ["cripto", "bolsa"];
+
+// "2026-10-05" → la del historial de ArgentinaDatos. Si ese día no tiene (fin de semana, feriado o la de hoy
+// todavía no cargó), la de hoy en vivo si es hoy, y si no, la del día hábil anterior.
+async function dollarRate(dia: string) {
+  const today = day(new Date());
+  const start = new Date(dia + "T12:00:00Z");
+  for (let back = 0; back < 5; back++) {
+    if (back === 1 && dia === today) {
+      const live = await dollarRateNow();
+      if (live) return live;
+    }
+    const date = new Date(start.getTime() - back * 86400000).toISOString().slice(0, 10).replace(/-/g, "/");
+    for (const kind of KINDS) {
+      try {
+        const response = await fetch("https://api.argentinadatos.com/v1/cotizaciones/dolares/" + kind + "/" + date);
+        const data = response.ok ? await response.json() : null;
+        if (data?.compra) return Number(data.compra);
+      } catch { /* probar el siguiente */ }
+    }
+  }
+  return dollarRateNow();
+}
+
+async function dollarRateNow() {
+  for (const kind of KINDS) {
     try {
       const data = await fetch("https://dolarapi.com/v1/dolares/" + kind).then((response) => response.json());
       if (data?.compra) return Number(data.compra);
