@@ -39,7 +39,7 @@ export const entidad = (id: string | null | undefined) => ENTIDADES.find((item) 
 export const entidadDePaquete = (paquete: string) => ENTIDADES.find((item) => item.paquetes.includes(paquete)) ?? null;
 
 // Lista que baja el celular (GET /notificaciones). Subir la versión cuando cambie.
-export const PAQUETES = { version: 1, paquetes: ENTIDADES.flatMap((item) => item.paquetes.map((paquete) => ({ paquete, proveedor: item.id }))) };
+export const PAQUETES = { version: 2, paquetes: ENTIDADES.flatMap((item) => item.paquetes.map((paquete) => ({ paquete, proveedor: item.id }))) };
 
 const dominioDe = (from: string) => (from.match(/@([\w.-]+)/)?.[1] ?? "").toLowerCase();
 const esDe = (dominio: string, oficial: string) => dominio === oficial || dominio.endsWith("." + oficial);

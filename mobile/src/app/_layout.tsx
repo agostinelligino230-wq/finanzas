@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Toaster } from "../components/Toast";
 import { AuthProvider, useAuth } from "../lib/auth";
+import { useListaDeApps } from "../lib/notificaciones";
 import { useColors } from "../lib/theme";
 
 export default function RootLayout() {
@@ -20,6 +21,7 @@ export default function RootLayout() {
 function Root() {
   const { loading } = useAuth();
   const colors = useColors();
+  useListaDeApps();
   if (loading) return <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}><ActivityIndicator color={colors.primary} /></View>;
   return (
     <>
