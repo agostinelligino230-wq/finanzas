@@ -5,7 +5,7 @@
 // 401 = token inválido o revocado (la app pide volver a vincular) · 413 = más de 50 avisos · 429 = más de 120 por minuto.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { entidadDePaquete, PAQUETES } from "../_shared/lectores/entidades.ts";
-import { cotizacionUnaVez, procesarAviso } from "../_shared/lectores/procesar.ts";
+import { cotizacionPorDia, procesarAviso } from "../_shared/lectores/procesar.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     const { data: allowed } = await admin.rpc("take_device_quota", { p_device: device.id, p_count: avisos.length, p_limit: MAX_POR_MINUTO, p_listener: typeof body?.escuchando === "boolean" ? body.escuchando : null });
     if (!allowed) return json({ error: "espera" }, 429);
 
-    const ctx = { userId: device.user_id, nombre: null, proveedores: null, cotizacion: cotizacionUnaVez() };
+    const ctx = { userId: device.user_id, nombre: null, proveedores: null, cotizacion: cotizacionPorDia() };
     const resultados = [];
     for (const item of avisos) {
       const clave = text(item.clave, 200);

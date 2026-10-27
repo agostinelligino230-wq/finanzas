@@ -9,7 +9,7 @@ import { createRemoteJWKSet, jwtVerify } from "npm:jose@5.9.6";
 import { accessToken, addedSince, fullMail, mailHeaders, search } from "../_shared/gmail.ts";
 import { BUSQUEDA } from "../_shared/lectores/mail.ts";
 import { entidadPorDominio } from "../_shared/lectores/entidades.ts";
-import { avisoDeMail, cotizacionUnaVez, procesarAviso } from "../_shared/lectores/procesar.ts";
+import { avisoDeMail, cotizacionPorDia, procesarAviso } from "../_shared/lectores/procesar.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -70,7 +70,7 @@ async function processLink(link: Link, notified: string): Promise<"ok" | "busy">
       await admin.from("gmail_links").update({ last_result: { error: "permiso" } }).eq("user_id", link.user_id);
       return "ok";
     }
-    const ctx = { userId: link.user_id, nombre: link.name, proveedores: link.providers ?? [], cotizacion: cotizacionUnaVez() };
+    const ctx = { userId: link.user_id, nombre: link.name, proveedores: link.providers ?? [], cotizacion: cotizacionPorDia() };
     if (!link.history_id) {
       next = notified || null; // Primera vez: desde acá en adelante.
       return "ok";

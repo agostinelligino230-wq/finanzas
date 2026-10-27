@@ -49,15 +49,20 @@ export async function mailHeaders(access: string, id: string) {
   return { id, from: headerOf(headers, "from"), subject: headerOf(headers, "subject"), auth: authOf(headers) };
 }
 
-// Una o varias búsquedas: cada mail se baja una sola vez aunque aparezca en más de una.
-export async function search(access: string, query: string | string[], days: number, max = 100): Promise<Mail[]> {
+// Una o varias búsquedas, solo los ids (sin bajar los mails): cada id aparece una vez aunque salga en más de una.
+export async function searchIds(access: string, query: string | string[], days: number, max = 100): Promise<string[]> {
   const ids = new Set<string>();
   for (const text of Array.isArray(query) ? query : [query]) {
     const list = await gmailGet(access, "messages?maxResults=" + max + "&q=" + encodeURIComponent(text + " newer_than:" + days + "d"));
     for (const item of (list.messages ?? []) as { id: string }[]) ids.add(item.id);
   }
+  return [...ids];
+}
+
+// Las búsquedas con cada mail completo (se baja una sola vez aunque aparezca en más de una).
+export async function search(access: string, query: string | string[], days: number, max = 100): Promise<Mail[]> {
   const mails: Mail[] = [];
-  for (const id of ids) {
+  for (const id of await searchIds(access, query, days, max)) {
     const mail = await fullMail(access, id);
     if (mail) mails.push(mail);
   }
