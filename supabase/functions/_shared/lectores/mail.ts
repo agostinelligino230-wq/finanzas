@@ -8,7 +8,7 @@ import { ENTIDADES } from "./entidades.ts";
 // 1) los asuntos que leen los lectores de abajo (aunque Gmail los haya mandado a Promociones);
 // 2) todo lo que llega de los dominios oficiales de cada entidad, menos Promociones y Social:
 //    lo que ningún lector reconoce pasa por el genérico y la IA (si el banco lo firmó) y queda «para revisar».
-const REGLAS = '{from:uala.com.ar from:mercadopago from:bna from:macro from:wallbit from:naranjax.com} {subject:"transferencia fue exitosa" subject:"Resumen tarjeta" subject:"Pago aprobado" subject:"Aviso de transferencia" subject:Recibiste subject:"una compra en tu tarjeta"}';
+const REGLAS = '{from:uala.com.ar from:mercadopago from:bna from:macro from:wallbit from:naranjax.com} {subject:"transferencia fue exitosa" subject:"Resumen tarjeta" subject:"Pago aprobado" subject:"Aviso de transferencia" subject:Recibiste subject:"una compra en tu tarjeta" subject:"transferencia fue enviada" subject:"Pagaste tu" subject:"Pagaste tus"}';
 const DOMINIOS = [...new Set(ENTIDADES.flatMap((item) => item.dominios))];
 const AMPLIA = "{" + DOMINIOS.map((dominio) => "from:" + dominio).join(" ") + "} -category:promotions -category:social";
 export const BUSQUEDA = [REGLAS, AMPLIA];
@@ -63,6 +63,22 @@ export const LECTORES_MAIL: Lector[] = [
       if (!value) return null;
       const several = /cr[eé]ditos/i.test(aviso.titulo);
       return { tipo: "gasto", monto: amount(value[1]), moneda: "ARS", descripcion: (several ? "Cuotas de tus créditos" : "Cuota de tu crédito") + " (Mercado Pago)", categoria: "otro" };
+    },
+  },
+  {
+    // Transferencia que mandaste desde Mercado Pago (muestra real): «Tu transferencia fue enviada»,
+    // «Ya enviamos tu transferencia de $ 580.000 · Datos del beneficiario · Nombre y apellido: Apellido, Nombre ·
+    // Entidad: <banco> · Número de cuenta: …». El nombre viene «Apellido, Nombre».
+    proveedor: "mercadopago", canal: "mail",
+    reconoce: (aviso) => de(aviso, /mercado ?pago/i, /transferencia fue enviada/i),
+    leer(aviso, ctx) {
+      const value = aviso.texto.match(/transferencia de\s*\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)/i);
+      if (!value) return null;
+      const to = aviso.texto.match(/Nombre y apellido:?\s*(.+?)\s+(?:Entidad|CUIT|CUIL|CVU|CBU|Alias|N[uú]mero de cuenta)\b/i);
+      const raw = to ? to[1].trim() : "";
+      if (raw && isOwn(ctx.nombre, raw)) return { descartar: "transferencia a vos mismo" };
+      const name = raw.includes(",") ? raw.split(",").slice(1).join(" ").trim() + " " + raw.split(",")[0].trim() : raw;
+      return { tipo: "gasto", monto: amount(value[1]), moneda: "ARS", descripcion: name ? "Transferencia a " + titleCase(name) : "Transferencia (Mercado Pago)", categoria: "transferencias" };
     },
   },
   {
