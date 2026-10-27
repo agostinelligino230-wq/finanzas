@@ -16,12 +16,13 @@ export type Entidad = {
 export const ENTIDADES: Entidad[] = [
   { id: "uala", nombre: "Ualá", remitente: /uala/i, dominios: ["uala.com.ar"], dkimConfirmado: false, paquetes: ["ar.com.bancar.uala"] },
   { id: "mercadopago", nombre: "Mercado Pago", remitente: /mercado ?pago/i, dominios: ["mercadopago.com", "mercadopago.com.ar"], dkimConfirmado: true, paquetes: ["com.mercadopago.wallet"] },
-  { id: "wallbit", nombre: "Wallbit", remitente: /wallbit/i, dominios: ["wallbit.io"], dkimConfirmado: true, paquetes: [] },
+  { id: "wallbit", nombre: "Wallbit", remitente: /wallbit/i, dominios: ["wallbit.io"], dkimConfirmado: true, paquetes: ["io.wallbit"] },
   { id: "nacion", nombre: "Banco Nación", remitente: /bna/i, dominios: ["bna.com.ar"], dkimConfirmado: false, paquetes: ["com.banconacion.bnamas"] },
   { id: "macro", nombre: "Banco Macro", remitente: /macro/i, dominios: ["macro.com.ar"], dkimConfirmado: false, paquetes: [] },
   // Galicia publicó sus únicos remitentes oficiales (cuenta @BancoGalicia en X, ago-2022). Falta ver con qué dominio firman (P2).
   { id: "galicia", nombre: "Galicia", remitente: /galicia/i, dominios: ["email.galicia.ar", "email.quiero.ar", "mkt.bancogalicia.com.ar", "bancogalicia.com.ar", "mensajesgalicia.com.ar", "mktins.galicia.ar", "mail.beneficios.galicia.ar"], dkimConfirmado: false, paquetes: ["com.mosync.app_Banco_Galicia"] },
-  // Solo por notificación (lista argentina de Bluecoins + Naranja X). Falta el paquete de Macro y de Wallbit.
+  // Solo por notificación (lista argentina de Bluecoins + Naranja X). Falta el paquete de Macro.
+  // Wallbit (io.wallbit): visto instalado en un celular real el 27-oct. Las conversiones y los envíos no llegan por mail.
   { id: "naranjax", nombre: "Naranja X", remitente: /naranja/i, dominios: ["naranjax.com"], dkimConfirmado: true, paquetes: ["com.tarjetanaranja.ncuenta"] },
   { id: "brubank", nombre: "Brubank", dominios: ["brubank.com"], dkimConfirmado: false, paquetes: ["com.brubank"] },
   { id: "bbva", nombre: "BBVA", dominios: [], dkimConfirmado: false, paquetes: ["com.bbva.nxt_argentina"] },
@@ -38,7 +39,7 @@ export const entidad = (id: string | null | undefined) => ENTIDADES.find((item) 
 export const entidadDePaquete = (paquete: string) => ENTIDADES.find((item) => item.paquetes.includes(paquete)) ?? null;
 
 // Lista que baja el celular (GET /notificaciones). Subir la versión cuando cambie.
-export const PAQUETES = { version: 1, paquetes: ENTIDADES.flatMap((item) => item.paquetes.map((paquete) => ({ paquete, proveedor: item.id }))) };
+export const PAQUETES = { version: 2, paquetes: ENTIDADES.flatMap((item) => item.paquetes.map((paquete) => ({ paquete, proveedor: item.id }))) };
 
 const dominioDe = (from: string) => (from.match(/@([\w.-]+)/)?.[1] ?? "").toLowerCase();
 const esDe = (dominio: string, oficial: string) => dominio === oficial || dominio.endsWith("." + oficial);

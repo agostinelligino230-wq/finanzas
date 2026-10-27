@@ -17,6 +17,18 @@ export async function actualizarPaquetes() {
   if (data?.paquetes) Lector.actualizarPaquetes(data.paquetes.map((item) => item.paquete), data.version ?? 0);
 }
 
+// Al abrir la app (y al volver a ella), un celular ya vinculado baja la lista de nuevo: así una entidad
+// que se suma en el servidor (por ejemplo, Wallbit) se escucha sin tener que volver a vincular el celular.
+export function useListaDeApps() {
+  useEffect(() => {
+    if (!disponible) return;
+    const update = () => { if (Lector.estado().vinculado) actualizarPaquetes(); };
+    update();
+    const sub = AppState.addEventListener("change", (state) => { if (state === "active") update(); });
+    return () => sub.remove();
+  }, []);
+}
+
 // Da de alta este celular (el token viaja una sola vez) y prende el lector.
 export async function vincular(): Promise<string | null> {
   if (!supabase) return "Falta configurar Supabase.";
