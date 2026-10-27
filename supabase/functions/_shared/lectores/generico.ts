@@ -9,7 +9,9 @@ const PESOS = /(?:AR\$|ARS|(?<![A-Za-z])\$)\s?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|
 const DOLARES = /(?:US\$|USD|U\$S|u\$d)\s?\$?\s?(\d[\d.,]*)/i;
 const INGRESO = /\b(recibiste|te (?:transfiri[oó]|envi[oó]|pag[oó]|lleg[oó])|te acreditamos|acreditamos|ingres[oó] (?:plata|dinero)|cobraste)\b/i;
 const GASTO = /\b(pagaste|compraste|transferiste|enviaste|consumo|compra (?:aprobada|realizada)|realizaste (?:una |un )?(?:compra|transferencia|pago)|debitamos|extrajiste)\b/i;
-const NO_ES = /\b(promo|promoci[oó]n|descuento|beneficio|sin inter[eé]s|tu resumen|record[aá]|c[oó]digo de (?:seguridad|verificaci[oó]n)|tu clave|contrase[nñ]a|iniciaste sesi[oó]n|nuevo dispositivo|rechazad[ao]|no se pudo|cancelad[ao]|pendiente)\b/i;
+// Avisos de que salió un resumen («Resumen de Cuenta VISA» de Galicia, «El detalle mensual de tu cuenta está listo»):
+// traen montos (total, mínimo) pero no son un movimiento. Los resúmenes de tarjeta se leen aparte, del PDF.
+const NO_ES = /\b(promo|promoci[oó]n|descuento|beneficio|sin inter[eé]s|tu resumen|resumen de (?:cuenta|tarjeta)|detalle mensual|record[aá]|c[oó]digo de (?:seguridad|verificaci[oó]n)|tu clave|contrase[nñ]a|iniciaste sesi[oó]n|nuevo dispositivo|rechazad[ao]|no se pudo|cancelad[ao]|pendiente)\b/i;
 
 // "1,234.56" o "1.234,56" o "15,99" → número.
 function dollars(text: string) {
