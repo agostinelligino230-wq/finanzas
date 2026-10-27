@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Check, ChevronDown, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
+import { Check, ChevronDown, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
 import { Card } from "./ui";
 import { dayLabel, money, timeLabel } from "../lib/format";
 import { originLabel, type Movement } from "../lib/movements";
 
 // Movimientos que llegaron sin un aviso verificado del banco (mail sin firma, texto que no reconocimos…).
 // No suman hasta que los confirmes; si no son tuyos o están mal, los borrás.
-export function ReviewCard({ items, onConfirm, onRemove }: { items: Movement[]; onConfirm: (item: Movement) => void; onRemove: (item: Movement) => void }) {
+export function ReviewCard({ items, onConfirm, onRemove, onReread }: { items: Movement[]; onConfirm: (item: Movement) => void; onRemove: (item: Movement) => void; onReread: (item: Movement) => Promise<void> }) {
   const [open, setOpen] = useState(true);
   if (items.length === 0) return null;
   return (
@@ -27,6 +27,7 @@ export function ReviewCard({ items, onConfirm, onRemove }: { items: Movement[]; 
                   <p className="text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{originLabel(item) && " · " + originLabel(item)}</p>
                 </div>
                 <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: item.type === "ingreso" ? "var(--income)" : undefined }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</span>
+                <RereadButton item={item} onReread={onReread} />
                 <button type="button" onClick={() => onConfirm(item)} className="flex h-11 shrink-0 items-center gap-1 rounded-full bg-[var(--primary-soft)] px-4 text-sm font-semibold text-[var(--primary-text)]" aria-label={"Confirmar " + item.description}><Check size={15} />Es mío</button>
                 <button type="button" onClick={() => { if (window.confirm("¿Borrar «" + item.description + "»? Si no era tuyo, no suma en ningún lado.")) onRemove(item); }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--expense-soft)] hover:text-[var(--expense)]" aria-label={"Borrar " + item.description}><Trash2 size={16} /></button>
               </div>
@@ -35,6 +36,19 @@ export function ReviewCard({ items, onConfirm, onRemove }: { items: Movement[]; 
         </>
       )}
     </Card>
+  );
+}
+
+// Lo que vino de un mail se puede volver a leer con los lectores de hoy (corrige monto y descripción).
+export function RereadButton({ item, onReread }: { item: Movement; onReread: (item: Movement) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  if (!item.fromMail) return null;
+  const run = async () => { setBusy(true); await onReread(item); setBusy(false); };
+  return (
+    <button type="button" disabled={busy} onClick={run} title="Volver a leer el mail" aria-label={"Volver a leer el mail de " + item.description}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--primary-soft)] hover:text-[var(--primary-text)] disabled:opacity-60">
+      <RefreshCw size={16} className={busy ? "animate-spin" : undefined} />
+    </button>
   );
 }
 

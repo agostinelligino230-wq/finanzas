@@ -13,11 +13,12 @@ export type Movement = {
   id: string; description: string; amount: number; category: string; date: string; createdAt: string; type: MovementType; paid: boolean;
   currency: Currency; original: number | null; rate: number | null; source: string | null; trust: Trust; confirmedAt: string | null; channels: Channel[];
   readByAI: boolean; // Lo leyó la IA de respaldo (ningún lector propio lo reconoció): se avisa siempre.
+  fromMail: boolean; // Salió de un mail: se puede volver a leer con los lectores de hoy.
 };
 export type NewMovement = { description: string; amount: number; category: string; date: string; type: MovementType; paid: boolean; currency?: Currency; original?: number | null; rate?: number | null };
 export type MovementRow = {
   id: string; description: string; amount: number | string; category: string; movement_type: MovementType; movement_date: string; paid: boolean; created_at: string;
-  currency?: string | null; original_amount?: number | string | null; exchange_rate?: number | string | null; source?: string | null;
+  currency?: string | null; original_amount?: number | string | null; exchange_rate?: number | string | null; source?: string | null; external_id?: string | null;
   trust?: string | null; confirmed_at?: string | null; incoming_notices?: { channel: string; parser?: string | null }[] | null;
 };
 
@@ -33,7 +34,17 @@ export const fromRow = (row: MovementRow): Movement => ({
   trust: TRUSTS.includes(row.trust as Trust) ? (row.trust as Trust) : "manual", confirmedAt: row.confirmed_at ?? null,
   channels: [...new Set((row.incoming_notices ?? []).map((notice) => notice.channel))].filter((channel): channel is Channel => channel === "mail" || channel === "push").sort(),
   readByAI: (row.incoming_notices ?? []).some((notice) => notice.parser === "ai") && !(row.incoming_notices ?? []).some((notice) => notice.parser === "rule"),
+  fromMail: (row.incoming_notices ?? []).some((notice) => notice.channel === "mail") || (row.external_id ?? "").startsWith("mail:"),
 });
+
+// Por qué no se pudo volver a leer el mail de un movimiento (lo que contesta la función gmail con accion "releer").
+export function rereadErrorMessage(code?: string) {
+  if (code === "sin-mail") return "No encontramos el mail de este movimiento: puede que lo hayas borrado de Gmail.";
+  if (code === "permiso") return "Google ya no nos deja leer tu Gmail. Volvé a conectarlo.";
+  if (code === "no-se-pudo-leer") return "Volvimos a leer el mail y no encontramos el monto. Corregilo a mano.";
+  if (code === "sin-cotizacion") return "No pudimos traer la cotización del dólar. Probá en un rato.";
+  return "No se pudo volver a leer el mail. Probá en un rato.";
+}
 
 // Lo dudoso no suma (ni al saldo, ni a los gráficos, ni a la descarga) hasta que lo confirmes.
 export const counts = (item: Movement) => item.trust !== "doubtful" || item.confirmedAt !== null;

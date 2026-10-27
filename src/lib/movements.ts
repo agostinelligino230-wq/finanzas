@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase";
 import { readCache, writeCache } from "./cache";
-import { MOVEMENT_COLUMNS, counts, fromRow, sortMovements, type Movement, type MovementRow, type NewMovement } from "../../shared/movimientos";
+import { MOVEMENT_COLUMNS, counts, fromRow, rereadErrorMessage, sortMovements, type Movement, type MovementRow, type NewMovement } from "../../shared/movimientos";
 // Tipos y reglas compartidos con la app del celular (shared/movimientos.ts).
 export * from "../../shared/movimientos";
 
@@ -86,6 +86,18 @@ export function useMovements(userId: string) {
     setAll((current) => current.map((movement) => (movement.id === item.id ? { ...movement, confirmedAt } : movement)));
   };
 
+  // Volver a leer el mail del que salió, con los lectores de hoy: el servidor corrige monto y descripción.
+  const reread = async (item: Movement) => {
+    if (!supabase) return;
+    const { data, error: callError } = await supabase.functions.invoke("gmail", { body: { accion: "releer", movimiento: item.id } });
+    if (callError || data?.error) { setError(rereadErrorMessage(data?.error)); return; }
+    setError("");
+    const { data: row } = await supabase.from("movements").select(MOVEMENT_COLUMNS).eq("id", item.id).maybeSingle();
+    if (!row) return;
+    const next = fromRow(row as unknown as MovementRow);
+    setAll((current) => current.map((movement) => (movement.id === item.id ? next : movement)));
+  };
+
   const remove = async (item: Movement) => {
     if (!supabase) return;
     const { error: saveError } = await supabase.from("movements").delete().eq("id", item.id);
@@ -93,5 +105,5 @@ export function useMovements(userId: string) {
     setAll((current) => current.filter((movement) => movement.id !== item.id));
   };
 
-  return { movements, toReview, error, add, togglePaid, confirm, remove, reload };
+  return { movements, toReview, error, add, togglePaid, confirm, reread, remove, reload };
 }

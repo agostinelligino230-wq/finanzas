@@ -16,7 +16,7 @@ import { Origin, ReviewCard } from "./ReviewCard";
 
 export default function ExpensesPage() {
   const { user, cobro } = useAuth();
-  const { movements, toReview, error, add, togglePaid, confirm, remove, reload } = useMovements(user.id);
+  const { movements, toReview, error, add, togglePaid, confirm, reread, remove, reload } = useMovements(user.id);
   const { categories, addCategory } = useCategories(user.id);
   const cardsData = useCards(user.id);
   const [month, setMonth] = useState(() => currentCycle(cobro));
@@ -77,7 +77,7 @@ export default function ExpensesPage() {
 
       <ErrorBox message={error} />
 
-      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} />
+      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} onReread={reread} />
 
       <StatementSources userId={user.id} onlyPending />
 

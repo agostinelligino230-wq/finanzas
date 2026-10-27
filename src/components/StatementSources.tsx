@@ -133,7 +133,11 @@ function SourceRow({ source, busy, disabled, onAnalyze, onAuto, onDismiss }: {
           <p className="text-[var(--muted)]">{[result.vence && "Vence el " + shortDate(result.vence), result.minimo && "pago mínimo " + money(result.minimo)].filter(Boolean).join(" · ")}</p>
           <p className="text-[var(--muted)]">{result.consumos} {result.consumos === 1 ? "consumo" : "consumos"}{result.cuotas > 0 && " · " + result.cuotas + (result.cuotas === 1 ? " compra en cuotas" : " compras en cuotas")}{result.cargos > 0 && " · " + money(result.cargos) + " de impuestos y cargos"}</p>
           {result.pendiente > 0 && <p className="font-medium">Te quedan {money(result.pendiente)} en cuotas por pagar{result.hasta && " (hasta " + monthLabel(result.hasta).toLowerCase() + ")"}.</p>}
-          <Link to="/tarjetas" className="inline-block pt-1 font-semibold text-[var(--primary-text)]">Ver el detalle en Tarjetas</Link>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+            <Link to="/tarjetas" className="font-semibold text-[var(--primary-text)]">Ver el detalle en Tarjetas</Link>
+            {/* Ya analizado: se puede leer de nuevo el mismo PDF (por ejemplo, después de una mejora del lector). */}
+            {!pending && <button type="button" disabled={disabled} onClick={() => onAnalyze({})} className="font-semibold text-[var(--primary-text)] disabled:opacity-60">Volver a analizar</button>}
+          </div>
         </div>
       )}
 

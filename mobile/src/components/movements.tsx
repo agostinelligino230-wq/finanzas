@@ -43,12 +43,17 @@ export function MovementRow({ item, categories, onTogglePaid, onRemove, showDay 
           {item.paid ? <Icon name="Check" size={16} color="#ffffff" /> : null}
         </Pressable>
       ) : <CategoryIcon category={category} size={32} />}
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <T numberOfLines={1} color={pending ? colors.muted : undefined} style={{ fontWeight: "500" }}>{title}{pending ? " · pendiente" : ""}</T>
-        <T variant="small" numberOfLines={1}>{showDay ? dayLabel(item.date) + " · " : ""}{timeLabel(item.createdAt)}{item.currency === "USD" && item.original !== null ? " · " + usd(item.original) + " a " + money(item.rate ?? 0) : ""}</T>
-        <Origin item={item} />
-      </View>
-      <Text style={{ fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"], color: item.type === "ingreso" ? colors.income : colors.text }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</Text>
+      {/* Lo que vino de un mail se abre para corregirlo o volver a leer el mail. */}
+      <Pressable disabled={!item.fromMail} onPress={() => router.push({ pathname: "/agregar", params: { id: item.id } })}
+        accessibilityRole={item.fromMail ? "button" : undefined} accessibilityHint={item.fromMail ? "Abre el movimiento para corregirlo o volver a leer el mail" : undefined}
+        style={[styles.row, { flex: 1, minWidth: 0 }]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T numberOfLines={1} color={pending ? colors.muted : undefined} style={{ fontWeight: "500" }}>{title}{pending ? " · pendiente" : ""}</T>
+          <T variant="small" numberOfLines={1}>{showDay ? dayLabel(item.date) + " · " : ""}{timeLabel(item.createdAt)}{item.currency === "USD" && item.original !== null ? " · " + usd(item.original) + " a " + money(item.rate ?? 0) : ""}</T>
+          <Origin item={item} />
+        </View>
+        <Text style={{ fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"], color: item.type === "ingreso" ? colors.income : colors.text }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</Text>
+      </Pressable>
       {onRemove ? <IconButton icon="Trash2" label={"Eliminar " + title} onPress={() => confirmRemove(item, onRemove)} /> : null}
     </View>
   );

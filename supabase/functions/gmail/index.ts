@@ -2,16 +2,17 @@
 // GET ?start=…        → manda a la pantalla de Google para elegir la cuenta y dar permiso.
 // GET ?code=…&state=… → vuelve de Google: guarda el permiso, trae los últimos 60 días, pide el aviso al instante y vuelve a la app.
 // POST (con sesión)   → "Actualizar ahora" para ese usuario, buscar resúmenes de tarjeta ({accion:"tarjetas"}),
-//                        analizar el PDF de un resumen ({accion:"analizar", fuente, clave?, recordar?, auto?})
+//                        analizar el PDF de un resumen ({accion:"analizar", fuente, clave?, recordar?, auto?}),
+//                        volver a leer el mail de un movimiento ({accion:"releer", movimiento})
 //                        o desconectar Gmail ({accion:"desconectar"}).
 // POST (con X-Cron-Secret) → lo llama el programador diario: actualiza las cuentas que hace más de 20 horas no se leen
 //                        y renueva el aviso al instante (vence a los 7 días). Es la red de seguridad de gmail-push.
 // POST sin sesión ni clave → 401: nadie de afuera puede disparar la lectura de las cuentas.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getDocumentProxy } from "npm:unpdf@1.8.1";
-import { accessToken, base64url, gmailGet, search, stopWatch, watch } from "../_shared/gmail.ts";
+import { accessToken, base64url, fullMail, gmailGet, search, stopWatch, watch } from "../_shared/gmail.ts";
 import { BUSQUEDA, LEIDOS_POR_MAIL } from "../_shared/lectores/mail.ts";
-import { avisoDeMail, cotizacionUnaVez, procesarAviso } from "../_shared/lectores/procesar.ts";
+import { avisoDeMail, cotizacionUnaVez, leerAviso, procesarAviso } from "../_shared/lectores/procesar.ts";
 import type { Resumen } from "../_shared/lectores/tipos.ts";
 import { day } from "../_shared/lectores/texto.ts";
 
@@ -94,7 +95,7 @@ async function callback(url: URL) {
 
 async function syncRequest(req: Request) {
   const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-  const body = await req.json().catch(() => ({})) as { accion?: string; interno?: string; fuente?: string; clave?: string; recordar?: boolean; auto?: boolean };
+  const body = await req.json().catch(() => ({})) as { accion?: string; interno?: string; fuente?: string; clave?: string; recordar?: boolean; auto?: boolean; movimiento?: string };
 
   // Análisis automático de un resumen (lo pide la misma función, una vez por tarjeta).
   if (jwt && sameText(jwt, SERVICE_KEY) && body.interno === "analizar" && body.fuente) {
@@ -121,6 +122,7 @@ async function syncRequest(req: Request) {
       if (!source) return json({ error: "no existe" }, 404);
       return json(await analyzeSource(link, source as Source, { clave: body.clave, recordar: body.recordar, auto: body.auto }));
     }
+    if (body.accion === "releer" && body.movimiento) return json(await rereadMovement(link, body.movimiento));
     if (body.accion === "desconectar") return json(await disconnect(link));
     return json(await syncLink(link));
   }
@@ -189,6 +191,47 @@ async function readMails(access: string, link: Link, days: number) {
     if (result.leido) entry.leidos++;
   }
   return { added, statements, mails };
+}
+
+// ---------- Volver a leer el mail de un movimiento ----------
+// Un mail ya leído no se vuelve a procesar (queda anotado como visto), así que lo que entró con un lector viejo
+// queda como se leyó. Esto lo baja de nuevo de Gmail, lo lee con los lectores de hoy y corrige ese mismo movimiento.
+// La categoría, la fecha y si está confirmado no se tocan.
+async function rereadMovement(link: Link, id: string) {
+  const { data: movement } = await admin.from("movements").select("id, external_id, exchange_rate, op_ref").eq("id", id).eq("user_id", link.user_id).maybeSingle();
+  if (!movement) return { error: "no-existe" };
+  const { data: notice } = await admin.from("incoming_notices").select("id, notice_key").eq("user_id", link.user_id).eq("movement_id", id).eq("channel", "mail").order("received_at").limit(1).maybeSingle();
+  const externalId = (movement.external_id as string | null) ?? "";
+  const mailId = (notice?.notice_key as string | undefined) ?? (externalId.startsWith("mail:") ? externalId.slice(5) : null);
+  if (!mailId) return { error: "sin-mail" };
+  const access = await accessToken(link.refresh_token);
+  if (!access) return { error: "permiso" };
+  const mail = await fullMail(access, mailId);
+  if (!mail) return { error: "sin-mail" };
+
+  const leido = await leerAviso(admin, avisoDeMail(mail), { nombre: link.name, proveedores: link.providers });
+  const lectura = leido?.lectura;
+  if (!leido || !lectura || !("tipo" in lectura)) return { error: "no-se-pudo-leer" };
+  let pesos = lectura.monto;
+  let original: number | null = null;
+  let rate: number | null = null;
+  if (lectura.moneda === "USD") {
+    // Con la cotización con la que entró, así el monto en pesos no cambia solo porque hoy el dólar está a otro precio.
+    rate = Number(movement.exchange_rate) || await cotizacionUnaVez()();
+    if (!rate) return { error: "sin-cotizacion" };
+    original = lectura.monto;
+    pesos = Math.round(lectura.monto * rate * 100) / 100;
+  }
+  if (!(pesos > 0)) return { error: "no-se-pudo-leer" };
+
+  const values = {
+    description: lectura.descripcion.slice(0, 120), amount: pesos, currency: lectura.moneda, original_amount: original, exchange_rate: rate,
+    movement_type: lectura.tipo, op_ref: (movement.op_ref as string | null) ?? lectura.opRef ?? null,
+  };
+  const { error } = await admin.from("movements").update(values).eq("id", id).eq("user_id", link.user_id);
+  if (error) { console.error("releer", error.message); return { error: "no-se-pudo" }; }
+  if (notice) await admin.from("incoming_notices").update({ parser: leido.parser }).eq("id", notice.id);
+  return { ok: true, movimiento: { descripcion: values.description, monto: pesos, moneda: lectura.moneda, original, tipo: lectura.tipo } };
 }
 
 // ---------- Aviso al instante (Gmail → Pub/Sub → gmail-push) ----------

@@ -27,7 +27,8 @@ function AddMovement({ userId }: { userId: string }) {
   const { all, loaded } = useMovements(userId);
   if (!id) return <MovementForm userId={userId} initialKind={tipo === "ingreso" ? "ingreso" : "gasto"} />;
   const editing = all.find((item) => item.id === id);
-  if (editing) return <MovementForm key={editing.id} userId={userId} initialKind={editing.type} editing={editing} />;
+  // Si se vuelve a leer el mail y cambia lo leído, el formulario arranca de nuevo con lo nuevo.
+  if (editing) return <MovementForm key={[editing.id, editing.type, editing.amount, editing.description].join("|")} userId={userId} initialKind={editing.type} editing={editing} />;
   return (
     <SafeAreaView edges={["top", "bottom"]} style={{ flex: 1, backgroundColor: colors.surface, padding: 16, gap: 16 }}>
       {loaded ? (
@@ -46,7 +47,7 @@ const exact = (value: number) => "$ " + value.toLocaleString("es-AR", { minimumF
 
 function MovementForm({ userId, initialKind, editing }: { userId: string; initialKind: MovementType; editing?: Movement }) {
   const colors = useColors();
-  const { add, update } = useMovements(userId);
+  const { add, update, reread } = useMovements(userId);
   const { categories, addCategory } = useCategories(userId);
   const usdEdit = editing?.currency === "USD" && editing.original !== null;
   const [kind, setKind] = useState<MovementType>(initialKind);
@@ -64,6 +65,17 @@ function MovementForm({ userId, initialKind, editing }: { userId: string; initia
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [leaving, setLeaving] = useState(false);
+  const [rereading, setRereading] = useState(false);
+
+  const rereadMail = async () => {
+    if (!editing) return;
+    setRereading(true);
+    setError("");
+    const problem = await reread(editing);
+    setRereading(false);
+    if (problem) { setError(problem); return; }
+    toast("Listo: volvimos a leer el mail.", { ok: true });
+  };
 
   // Al elegir dólares, trae la cotización del momento y la propone (se puede cambiar).
   useEffect(() => {
@@ -127,6 +139,9 @@ function MovementForm({ userId, initialKind, editing }: { userId: string; initia
               <T style={{ flex: 1, fontSize: 14 }} color={colors.primaryText}>Este aviso lo leyó la IA porque no lo reconocimos. Revisá el monto y el tipo: al guardar queda confirmado.</T>
             </View>
           ) : editing ? <T variant="small" style={{ fontSize: 14 }}>Revisá lo que leímos del aviso. Al guardar queda confirmado y suma.</T> : null}
+          {editing?.fromMail ? (
+            <Button label={rereading ? "Leyendo el mail…" : "Volver a leer el mail"} icon="RefreshCw" variant="ghost" onPress={rereadMail} busy={rereading} disabled={busy || rereading} style={{ alignSelf: "flex-start", paddingHorizontal: 0 }} />
+          ) : null}
           <Segmented value={kind} onChange={(next) => { setKind(next); if (!editing) setCategory(""); setCreating(false); }} options={[{ value: "gasto", label: "Gasto" }, { value: "ingreso", label: "Ingreso" }]} />
 
           <View style={{ gap: 6 }}>

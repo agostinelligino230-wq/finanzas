@@ -157,7 +157,11 @@ function SourceRow({ source, busy, disabled, onAnalyze, onAuto, onDismiss }: {
           {dates ? <T variant="small" style={{ fontSize: 14 }}>{dates}</T> : null}
           <T variant="small" style={{ fontSize: 14 }}>{result.consumos} {result.consumos === 1 ? "consumo" : "consumos"}{result.cuotas > 0 ? " · " + result.cuotas + (result.cuotas === 1 ? " compra en cuotas" : " compras en cuotas") : ""}{result.cargos > 0 ? " · " + money(result.cargos) + " de impuestos y cargos" : ""}</T>
           {result.pendiente > 0 ? <T style={{ fontSize: 14, fontWeight: "500" }}>Te quedan {money(result.pendiente)} en cuotas por pagar{result.hasta ? " (hasta " + monthLabel(result.hasta).toLowerCase() + ")" : ""}.</T> : null}
-          <Button label="Ver el detalle en Tarjetas" variant="ghost" onPress={() => router.push("/fijos")} style={{ alignSelf: "flex-start", paddingHorizontal: 0 }} />
+          <View style={[styles.row, { flexWrap: "wrap", gap: 16 }]}>
+            <Button label="Ver el detalle en Tarjetas" variant="ghost" onPress={() => router.push("/fijos")} style={{ paddingHorizontal: 0 }} />
+            {/* Ya analizado: se puede leer de nuevo el mismo PDF (por ejemplo, después de una mejora del lector). */}
+            {!pending ? <Button label="Volver a analizar" icon="RefreshCw" variant="ghost" onPress={() => onAnalyze({})} disabled={disabled} style={{ paddingHorizontal: 0 }} /> : null}
+          </View>
         </View>
       ) : null}
 
