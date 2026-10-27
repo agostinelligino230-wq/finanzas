@@ -53,6 +53,19 @@ export const LECTORES_MAIL: Lector[] = [
     },
   },
   {
+    // La cuota de un crédito de Mercado Pago (muestra real del 15-oct): «Pagaste tu crédito» (o «Pagaste tus créditos»),
+    // «Tomas, pagaste tu crédito y estás al día · Resumen de pago · Monto pagado $ 24.271,45 · Medio de pago Dinero en cuenta».
+    // Sin este lector lo descartaba el genérico (el pie del mail habla de la contraseña).
+    proveedor: "mercadopago", canal: "mail",
+    reconoce: (aviso) => de(aviso, /mercado ?pago/i, /Pagaste tus? cr[eé]ditos?/i),
+    leer(aviso) {
+      const value = aviso.texto.match(/Monto pagado:?\s*\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)/i);
+      if (!value) return null;
+      const several = /cr[eé]ditos/i.test(aviso.titulo);
+      return { tipo: "gasto", monto: amount(value[1]), moneda: "ARS", descripcion: (several ? "Cuotas de tus créditos" : "Cuota de tu crédito") + " (Mercado Pago)", categoria: "otro" };
+    },
+  },
+  {
     proveedor: "nacion", canal: "mail",
     reconoce: (aviso) => de(aviso, /bna/i, /Aviso de transferencia/i),
     leer(aviso, ctx) {
