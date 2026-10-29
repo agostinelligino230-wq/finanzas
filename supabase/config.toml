@@ -10,3 +10,7 @@ verify_jwt = false
 [functions.notificaciones]
 # La llama la app de Android con su propio token de dispositivo (X-Device-Token).
 verify_jwt = false
+
+[functions.mercadopago]
+# Vuelta de Mercado Pago (GET) o sesión del usuario (POST): la función valida cada pedido.
+verify_jwt = false
