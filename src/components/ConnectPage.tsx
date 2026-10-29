@@ -8,6 +8,7 @@ import { useAuth } from "./AuthGate";
 import { Card, ErrorBox, sheetLabel as label } from "./ui";
 import { NewCardSheet, ProviderIcon } from "./sheets";
 import StatementSources from "./StatementSources";
+import MercadoPagoCard from "./MercadoPagoCard";
 import CobroForm from "./CobroForm";
 import { cobroText, currentCycle, cycleText } from "../../shared/cobro";
 import { rereadText } from "../../shared/movimientos";
@@ -132,6 +133,8 @@ export default function ConnectPage() {
       </Card>
 
       {link && <StatementSources userId={user.id} />}
+
+      <MercadoPagoCard userId={user.id} />
 
       <Card className="space-y-3">
         <div>
