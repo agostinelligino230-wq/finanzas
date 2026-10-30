@@ -55,6 +55,8 @@ class LectorAvisosModule : Module() {
 
     Function("activar") { activo: Boolean -> Almacen.activar(context, activo) }
 
+    Function("activarUbicacion") { activa: Boolean -> Almacen.activarUbicacion(context, activa) }
+
     Function("actualizarPaquetes") { paquetes: List<String>, version: Int -> Almacen.guardarPaquetes(context, paquetes, version) }
 
     Function("estado") {

@@ -1,8 +1,16 @@
 package ar.finanzaspersonales.lectoravisos
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,12 +52,36 @@ class LectorAvisosService : NotificationListenerService() {
       .put("titulo", titulo.take(300))
       .put("texto", texto.take(4000))
       .put("textoLargo", largo.take(4000))
+    ubicacionReciente(context)?.let { json.put("lat", it.latitude).put("lng", it.longitude).put("precision", it.accuracy.toDouble()) }
     if (Almacen.encolar(context, json)) EnviarWorker.programar(context)
+  }
+
+  // Dónde estaba el teléfono cuando llegó el aviso: lo último que sabe Android, si tiene menos de 10 minutos.
+  // No enciende el GPS ni usa permiso en segundo plano. Sin permiso o sin dato, el aviso se manda igual.
+  @SuppressLint("MissingPermission")
+  private fun ubicacionReciente(context: Context): Location? = try {
+    val fina = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val aproximada = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    if (!Almacen.ubicacionActiva(context) || (!fina && !aproximada)) {
+      null
+    } else {
+      val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+      manager.getProviders(true)
+        .mapNotNull { runCatching { manager.getLastKnownLocation(it) }.getOrNull() }
+        .filter { SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos < MAX_EDAD_UBICACION_NS }
+        .minByOrNull { it.accuracy }
+    }
+  } catch (error: Exception) {
+    null
   }
 
   private fun iso(millis: Long): String {
     val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
     format.timeZone = TimeZone.getTimeZone("UTC")
     return format.format(Date(millis))
+  }
+
+  companion object {
+    private const val MAX_EDAD_UBICACION_NS = 10 * 60 * 1_000_000_000L
   }
 }

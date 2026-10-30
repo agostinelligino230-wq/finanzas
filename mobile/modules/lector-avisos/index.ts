@@ -19,6 +19,7 @@ type Nativo = {
   vincular(token: string, url: string): void;
   desvincular(): void;
   activar(activo: boolean): void;
+  activarUbicacion(activa: boolean): void;
   actualizarPaquetes(paquetes: string[], version: number): void;
   estado(): EstadoLector;
   enviarAhora(): void;
@@ -36,5 +37,6 @@ export const abrirAjustesApp = () => nativo?.abrirAjustesApp() ?? false;
 export const vincular = (token: string, url: string) => nativo?.vincular(token, url);
 export const desvincular = () => nativo?.desvincular();
 export const activar = (activo: boolean) => nativo?.activar(activo);
+export const activarUbicacion = (activa: boolean) => nativo?.activarUbicacion(activa);
 export const actualizarPaquetes = (paquetes: string[], version: number) => nativo?.actualizarPaquetes(paquetes, version);
 export const enviarAhora = () => nativo?.enviarAhora();

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
-import { money, monthLabel } from "../../../shared/format";
+import { money, monthLabel, todayISO } from "../../../shared/format";
+import { countedFixedRows, upcomingReminders } from "../../../shared/fijos";
 import { cardMonthSummary } from "../../../shared/tarjetas";
 import { useCards } from "../lib/cards";
 import { useFixed } from "../lib/fixed";
@@ -18,7 +19,8 @@ export function PendingPayments({ userId, month, available }: { userId: string; 
   const { cards, items, statements, payments } = useCards(userId);
   const monthName = monthLabel(month).toLowerCase();
 
-  const pendingFixed = fixed.rows.filter((row) => !row.paid && row.amount > 0);
+  const pendingFixed = countedFixedRows(fixed.rows, statements, month).filter((row) => !row.paid && row.amount > 0);
+  const reminders = upcomingReminders(fixed.rows, month, todayISO());
   const pendingCards = cards.map((card) => ({ card, summary: cardMonthSummary(items, statements, card.id, month, payments) })).filter((entry) => !entry.summary.payment && entry.summary.total > 0);
   const pendingTotal = pendingFixed.reduce((sum, row) => sum + row.amount, 0) + pendingCards.reduce((sum, entry) => sum + entry.summary.total, 0);
   if (fixed.rows.length === 0 && cards.length === 0) return null;
@@ -35,6 +37,13 @@ export function PendingPayments({ userId, month, available }: { userId: string; 
         </View>
         {pendingTotal > 0 ? <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text, fontVariant: ["tabular-nums"] }}>{money(pendingTotal)}</Text> : null}
       </View>
+
+      {reminders.map(({ row, days }) => (
+        <View key={row.item.id} style={[styles.row, { gap: 8, backgroundColor: colors.primarySoft, borderRadius: radius.field, paddingHorizontal: 12, paddingVertical: 8 }]}>
+          <Icon name="BellRing" size={16} color={colors.primaryText} />
+          <T style={{ flex: 1, fontSize: 14 }} color={colors.primaryText}>{row.item.name} vence {days === 0 ? "hoy" : days === 1 ? "mañana" : "en " + days + " días"}</T>
+        </View>
+      ))}
 
       {pendingTotal > 0 ? (
         <View>

@@ -4,18 +4,29 @@ import { useAuth } from "../components/AuthGate";
 import { readCache, writeCache } from "./cache";
 import { shiftMonth } from "./format";
 import { addLinkedExpense, fixedExternalId, payDate, removeLinkedExpense } from "./obligations";
-import { FIXED_EXPENSE_CATEGORY as EXPENSE_CATEGORY, amountFromRow, fixedFromRow, fixedPaymentFromRow as paymentFromRow, fixedRowsFor, mergeAmountChanges, scheduled, type AmountChange, type AmountRow, type Fixed, type FixedInput, type FixedPayment as Payment, type FixedPaymentRow as PaymentRow, type FixedRow, type FixedRowView } from "../../shared/fijos";
+import { getDollarQuote } from "./dollar";
+import { FIXED_EXPENSE_CATEGORY as EXPENSE_CATEGORY, amountFromRow, fixedDetailColumns, fixedFromRow, fixedPaymentFromRow as paymentFromRow, fixedRowsFor, mergeAmountChanges, scheduled, type AmountChange, type AmountRow, type Fixed, type FixedInput, type FixedPayment as Payment, type FixedPaymentRow as PaymentRow, type FixedRow, type FixedRowView } from "../../shared/fijos";
 // Tipos y cálculos compartidos con la app del celular (shared/fijos.ts).
-export { FIXED_KINDS, FIXED_LABELS, type Fixed, type FixedInput, type FixedKind, type FixedRowView } from "../../shared/fijos";
+export { FIXED_KINDS, FIXED_LABELS, PAYMENT_LABELS, PAYMENT_METHODS, REMINDER_OPTIONS, countedFixedRows, insideStatement, upcomingReminders, type Fixed, type FixedInput, type FixedKind, type FixedRowView, type PaymentMethod } from "../../shared/fijos";
 
 export function useFixed(userId: string, month: string) {
   const { cobro } = useAuth();
-  const [items, setItems] = useState<Fixed[]>(() => readCache<Fixed[]>("fixed_v2", userId) ?? (readCache<FixedRow[]>("raw:fixed_expenses", userId) ?? []).map(fixedFromRow));
+  const [items, setItems] = useState<Fixed[]>(() => readCache<Fixed[]>("fixed_v3", userId) ?? (readCache<FixedRow[]>("raw:fixed_expenses", userId) ?? []).map(fixedFromRow));
   const [changes, setChanges] = useState<AmountChange[]>(() => readCache<AmountChange[]>("fixed_amounts", userId) ?? []);
   const [payments, setPayments] = useState<Payment[]>(() => readCache<Payment[]>("payments2:" + month, userId) ?? []);
   const [error, setError] = useState("");
+  const [usdRate, setUsdRate] = useState<number | null>(null);
+  const hasUsd = items.some((item) => item.currency === "USD");
 
-  useEffect(() => { writeCache("fixed_v2", userId, items); }, [items, userId]);
+  // Los gastos fijos en dólares se pasan a pesos con la cotización del momento (venta: es lo que cuesta pagarlos).
+  useEffect(() => {
+    if (!hasUsd) return;
+    let active = true;
+    getDollarQuote().then((quote) => { if (active && quote) setUsdRate(quote.sell); });
+    return () => { active = false; };
+  }, [hasUsd]);
+
+  useEffect(() => { writeCache("fixed_v3", userId, items); }, [items, userId]);
   useEffect(() => { writeCache("fixed_amounts", userId, changes); }, [changes, userId]);
 
   useEffect(() => {
@@ -49,7 +60,7 @@ export function useFixed(userId: string, month: string) {
 
   const setMonthPayments = (update: (current: Payment[]) => Payment[]) => setPayments((current) => { const next = update(current); writeCache("payments2:" + month, userId, next); return next; });
 
-  const rows: FixedRowView[] = useMemo(() => fixedRowsFor(items, payments, changes, month), [items, payments, changes, month]);
+  const rows: FixedRowView[] = useMemo(() => fixedRowsFor(items, payments, changes, month, usdRate), [items, payments, changes, month, usdRate]);
 
   const fail = (message: string) => { setError(message); return false; };
 
@@ -79,7 +90,7 @@ export function useFixed(userId: string, month: string) {
 
   const create = async (input: FixedInput) => {
     if (!supabase) return false;
-    const { data, error: saveError } = await supabase.from("fixed_expenses").insert({ user_id: userId, name: input.name, amount: input.amount, category: input.category, due_day: input.dueDay, start_month: month }).select().single();
+    const { data, error: saveError } = await supabase.from("fixed_expenses").insert({ user_id: userId, name: input.name, amount: input.amount, category: input.category, due_day: input.dueDay, ...fixedDetailColumns(input), start_month: input.startMonth ?? month }).select().single();
     if (saveError || !data) return fail("No se pudo guardar el gasto fijo.");
     setError("");
     setItems((current) => [...current, fixedFromRow(data as FixedRow)]);
@@ -88,12 +99,14 @@ export function useFixed(userId: string, month: string) {
 
   const update = async (item: Fixed, input: FixedInput & { scope: "desde" | "solo" }) => {
     if (!supabase) return false;
-    const { error: saveError } = await supabase.from("fixed_expenses").update({ name: input.name, category: input.category, due_day: input.dueDay }).eq("id", item.id);
-    if (saveError) return fail("No se pudo guardar el gasto fijo.");
-    setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, name: input.name, category: input.category, dueDay: input.dueDay } : entry)));
+    const { data: savedRow, error: saveError } = await supabase.from("fixed_expenses").update({ name: input.name, category: input.category, due_day: input.dueDay, ...fixedDetailColumns({ ...input, currency: item.currency }) }).eq("id", item.id).select().single();
+    if (saveError || !savedRow) return fail("No se pudo guardar el gasto fijo.");
+    setItems((current) => current.map((entry) => (entry.id === item.id ? fixedFromRow(savedRow as FixedRow) : entry)));
 
     const payment = payments.find((entry) => entry.fixedId === item.id);
-    const current = payment?.amount ?? scheduled(item, changes, month);
+    // En dólares se compara contra el monto en US$: lo pagado está guardado en pesos.
+    const isUsd = item.currency === "USD";
+    const current = isUsd ? scheduled(item, changes, month) : payment?.amount ?? scheduled(item, changes, month);
     if (input.amount !== current) {
       const nextMonth = shiftMonth(month, 1);
       const nextBefore = scheduled(item, changes, nextMonth);
@@ -107,7 +120,7 @@ export function useFixed(userId: string, month: string) {
       }
       const saved = ((data ?? []) as AmountRow[]).map(amountFromRow);
       setChanges((list) => mergeAmountChanges(list, item.id, saved, input.scope, month));
-      if (payment) {
+      if (payment && !isUsd) {
         const { error: paymentError } = await supabase.from("fixed_expense_payments").update({ amount: input.amount }).eq("fixed_expense_id", item.id).eq("month", month);
         if (paymentError) return fail("No se pudo actualizar el pago de este mes.");
         await supabase.from("movements").update({ amount: input.amount, description: input.name }).eq("external_id", fixedExternalId(item.id, month));

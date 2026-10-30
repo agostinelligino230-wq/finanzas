@@ -1,11 +1,15 @@
-import { Alert, Pressable, View } from "react-native";
+import { Alert, Pressable, Switch, View } from "react-native";
 import { router, type Href } from "expo-router";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { useAuth } from "../../lib/auth";
+import { useMovements } from "../../lib/movements";
+import { pedirPermiso, tienePermiso, useUbicacion } from "../../lib/ubicacion";
 import { WEB_URL } from "../../lib/supabase";
 import { useColors } from "../../lib/theme";
 import { Icon } from "../../components/Icon";
+import { toast } from "../../components/Toast";
+import { confirmAction } from "../../components/fixedUi";
 import { Button, Card, Screen, T, styles } from "../../components/ui";
 
 // Las secciones de la web que no tienen pestaña propia.
@@ -15,6 +19,29 @@ const LINKS: { href: Href; icon: string; title: string; detail: string }[] = [
   { href: "/sugerencias", icon: "Lightbulb", title: "Sugerencias", detail: "Una guía para repartir tu ingreso" },
   { href: "/cobro", icon: "Banknote", title: "Día de cobro", detail: "Desde qué día cuenta «tu mes»" },
 ];
+
+function Ubicacion({ userId }: { userId: string }) {
+  const colors = useColors();
+  const { prendida, setPrendida, borrarTodo } = useUbicacion(userId);
+  const { reload } = useMovements(userId);
+  const change = async (value: boolean) => {
+    if (!(await setPrendida(value))) { toast("No se pudo guardar. Revisá tu conexión."); return; }
+    if (value && !(await tienePermiso())) await pedirPermiso();
+  };
+  const forget = () => confirmAction("¿Borrar todas las ubicaciones?", "Se borran de todos tus movimientos. No se puede deshacer.", "Borrar", async () => {
+    if (await borrarTodo()) { await reload(); toast("Listo: se borraron las ubicaciones.", { ok: true }); }
+    else toast("No se pudieron borrar. Revisá tu conexión.");
+  });
+  return (
+    <Card style={{ gap: 8 }}>
+      <View style={[styles.row, { minHeight: 48 }]}>
+        <View style={{ flex: 1 }}><T style={{ fontWeight: "600" }}>Guardar dónde hice cada gasto</T><T variant="small">Solo mientras usás la app. Lo ves únicamente vos.</T></View>
+        <Switch value={prendida} onValueChange={change} trackColor={{ true: colors.income, false: colors.border }} accessibilityLabel="Guardar dónde hice cada gasto" />
+      </View>
+      <Button label="Borrar todas las ubicaciones" variant="secondary" onPress={forget} />
+    </Card>
+  );
+}
 
 export default function More() {
   const { session, signOut } = useAuth();
@@ -38,6 +65,7 @@ export default function More() {
           </Pressable>
         ))}
       </Card>
+      {session ? <Ubicacion userId={session.user.id} /> : null}
       <Card style={{ gap: 4 }}>
         <T variant="label">Tu cuenta</T>
         <T>{session?.user.email ?? ""}</T>

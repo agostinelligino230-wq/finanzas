@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase";
 import { readCache, writeCache } from "./cache";
-import { MOVEMENT_COLUMNS, counts, fromRow, rereadErrorMessage, sortMovements, type Movement, type MovementRow, type NewMovement } from "../../shared/movimientos";
+import { MOVEMENT_COLUMNS, counts, fromRow, isListed, needsReview, rereadErrorMessage, sortMovements, type Movement, type MovementRow, type NewMovement } from "../../shared/movimientos";
 // Tipos y reglas compartidos con la app del celular (shared/movimientos.ts).
 export * from "../../shared/movimientos";
 
@@ -15,11 +15,20 @@ export async function loadMovementRows() {
   return { data: (plain.data ?? []) as unknown as MovementRow[], error: plain.error };
 }
 
+const TICKETS = "tickets";
+
+// Las fotos están en un bucket privado: se ven con una dirección que vence en una hora.
+export async function photoUrl(path: string) {
+  if (!supabase) return "";
+  const { data } = await supabase.storage.from(TICKETS).createSignedUrl(path, 3600);
+  return data?.signedUrl ?? "";
+}
+
 export function useMovements(userId: string) {
-  const [all, setAll] = useState<Movement[]>(() => readCache<Movement[]>("movements", userId) ?? (readCache<MovementRow[]>("raw:movements", userId) ?? []).map(fromRow));
+  const [all, setAll] = useState<Movement[]>(() => readCache<Movement[]>("movements_v2", userId) ?? (readCache<MovementRow[]>("raw:movements", userId) ?? []).map(fromRow));
   const [error, setError] = useState("");
 
-  useEffect(() => { writeCache("movements", userId, all); }, [all, userId]);
+  useEffect(() => { writeCache("movements_v2", userId, all); }, [all, userId]);
 
   const [version, setVersion] = useState(0);
   const reload = () => setVersion((value) => value + 1);
@@ -59,7 +68,9 @@ export function useMovements(userId: string) {
   }, [userId]);
 
   const movements = useMemo(() => all.filter(counts), [all]);
-  const toReview = useMemo(() => all.filter((item) => !counts(item)), [all]);
+  const toReview = useMemo(() => all.filter(needsReview), [all]);
+  const listed = useMemo(() => all.filter(isListed), [all]);
+  const patch = (id: string, changes: Partial<Movement>) => setAll((current) => current.map((movement) => (movement.id === id ? { ...movement, ...changes } : movement)));
 
   const add = async (input: NewMovement) => {
     if (!supabase) return false;
@@ -98,6 +109,63 @@ export function useMovements(userId: string) {
     setAll((current) => current.map((movement) => (movement.id === item.id ? next : movement)));
   };
 
+  const saveDetail = async (item: Movement, input: { note: string; category: string }) => {
+    if (!supabase) return false;
+    const note = input.note.trim() || null;
+    const { error: saveError } = await supabase.from("movements").update({ note, category: input.category }).eq("id", item.id);
+    if (saveError) return false;
+    patch(item.id, { note, category: input.category });
+    return true;
+  };
+
+  // «No es un gasto»: se ve en la lista, pero no suma.
+  const setExcluded = async (item: Movement, excluded: boolean) => {
+    if (!supabase) return;
+    const { error: saveError } = await supabase.from("movements").update({ excluded }).eq("id", item.id);
+    if (saveError) { setError("No se pudo actualizar el movimiento."); return; }
+    patch(item.id, { excluded });
+  };
+
+  const setPlace = async (item: Movement, point: { lat: number; lng: number } | null, name: string, address: string) => {
+    if (!supabase) return false;
+    const lat = point?.lat ?? item.place.lat;
+    const lng = point?.lng ?? item.place.lng;
+    const { error: saveError } = await supabase.rpc("set_movement_place", { p_id: item.id, p_lat: lat, p_lng: lng, p_place_name: name, p_place_address: address });
+    if (saveError) return false;
+    patch(item.id, { place: { ...item.place, lat, lng, name, address: address || null, at: item.place.at ?? new Date().toISOString() } });
+    return true;
+  };
+
+  const split = async (item: Movement, amount: number, category: string) => {
+    if (!supabase) return false;
+    const { error: saveError } = await supabase.rpc("split_movement", { p_id: item.id, p_amount: amount, p_category: category });
+    if (saveError) return false;
+    reload();
+    return true;
+  };
+
+  const uploadPhoto = async (item: Movement, file: File) => {
+    if (!supabase) return false;
+    const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const path = userId + "/" + item.id + "-" + Date.now() + "." + ext;
+    const { error: uploadError } = await supabase.storage.from(TICKETS).upload(path, file, { contentType: file.type || undefined });
+    if (uploadError) return false;
+    const { error: saveError } = await supabase.from("movements").update({ photo_path: path }).eq("id", item.id);
+    if (saveError) { await supabase.storage.from(TICKETS).remove([path]); return false; }
+    if (item.photoPath) await supabase.storage.from(TICKETS).remove([item.photoPath]);
+    patch(item.id, { photoPath: path });
+    return true;
+  };
+
+  const removePhoto = async (item: Movement) => {
+    if (!supabase || !item.photoPath) return false;
+    const { error: saveError } = await supabase.from("movements").update({ photo_path: null }).eq("id", item.id);
+    if (saveError) { setError("No se pudo borrar la foto."); return false; }
+    await supabase.storage.from(TICKETS).remove([item.photoPath]);
+    patch(item.id, { photoPath: null });
+    return true;
+  };
+
   const remove = async (item: Movement) => {
     if (!supabase) return;
     const { error: saveError } = await supabase.from("movements").delete().eq("id", item.id);
@@ -105,5 +173,5 @@ export function useMovements(userId: string) {
     setAll((current) => current.filter((movement) => movement.id !== item.id));
   };
 
-  return { movements, toReview, error, add, togglePaid, confirm, reread, remove, reload };
+  return { all, movements, listed, toReview, error, add, togglePaid, confirm, reread, remove, reload, saveDetail, setExcluded, setPlace, split, uploadPhoto, removePhoto };
 }

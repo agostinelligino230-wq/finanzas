@@ -14,3 +14,7 @@ verify_jwt = false
 [functions.mercadopago]
 # Vuelta de Mercado Pago (GET) o sesión del usuario (POST): la función valida cada pedido.
 verify_jwt = false
+
+[functions.lugares]
+# Valida la sesión en la función, igual que mercadopago.
+verify_jwt = false

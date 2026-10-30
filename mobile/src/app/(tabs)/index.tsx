@@ -15,6 +15,7 @@ import { Fab } from "../../components/Fab";
 import { MovementRow, ReviewList } from "../../components/movements";
 import { PendingPayments } from "../../components/obligations";
 import { StatementSources } from "../../components/statements";
+import { UbicacionAlAbrir } from "../../components/ubicacion";
 import { Card, CategoryIcon, ErrorBox, Loading, MonthPicker, Screen, Segmented, T, styles } from "../../components/ui";
 
 export default function Home() {
@@ -65,6 +66,7 @@ export default function Home() {
         </View>
 
         <ErrorBox message={data.error} onRetry={data.reload} />
+        <UbicacionAlAbrir userId={userId} />
         <ReviewList items={data.toReview} onConfirm={data.confirm} onRemove={data.remove} />
         <StatementSources userId={userId} onlyPending />
         <PendingPayments userId={userId} month={month} available={totals.available} />

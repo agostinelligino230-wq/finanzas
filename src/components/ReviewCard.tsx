@@ -6,7 +6,7 @@ import { originLabel, type Movement } from "../lib/movements";
 
 // Movimientos que llegaron sin un aviso verificado del banco (mail sin firma, texto que no reconocimos…).
 // No suman hasta que los confirmes; si no son tuyos o están mal, los borrás.
-export function ReviewCard({ items, onConfirm, onRemove, onReread }: { items: Movement[]; onConfirm: (item: Movement) => void; onRemove: (item: Movement) => void; onReread: (item: Movement) => Promise<void> }) {
+export function ReviewCard({ items, onConfirm, onRemove, onReread, onOpen }: { items: Movement[]; onConfirm: (item: Movement) => void; onRemove: (item: Movement) => void; onReread: (item: Movement) => Promise<void>; onOpen?: (item: Movement) => void }) {
   const [open, setOpen] = useState(true);
   if (items.length === 0) return null;
   return (
@@ -22,10 +22,10 @@ export function ReviewCard({ items, onConfirm, onRemove, onReread }: { items: Mo
           <div className="mt-2 divide-y divide-[var(--border)]">
             {items.map((item) => (
               <div key={item.id} className="flex items-center gap-2 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{item.description}</p>
-                  <p className="text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{originLabel(item) && " · " + originLabel(item)}</p>
-                </div>
+                <button type="button" onClick={() => onOpen?.(item)} className="min-w-0 flex-1 text-left">
+                  <span className="block truncate text-sm font-medium">{item.description}</span>
+                  <span className="block text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{originLabel(item) && " · " + originLabel(item)}</span>
+                </button>
                 <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: item.type === "ingreso" ? "var(--income)" : undefined }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</span>
                 <RereadButton item={item} onReread={onReread} />
                 <button type="button" onClick={() => onConfirm(item)} className="flex h-11 shrink-0 items-center gap-1 rounded-full bg-[var(--primary-soft)] px-4 text-sm font-semibold text-[var(--primary-text)]" aria-label={"Confirmar " + item.description}><Check size={15} />Es mío</button>

@@ -25,9 +25,10 @@ export const LECTORES_MAIL: Lector[] = [
       const to = aviso.texto.match(/Destinatario:?\s+(.+?)\s+(CBU|CVU|Alias|Id\.)/i);
       const op = aviso.texto.match(/Id\.?\s*Op\.?:?\s*([\w-]+)/i);
       const name = to ? to[1].trim() : "";
+      const ref = aviso.texto.match(/(?:CBU|CVU|Alias):?\s+([\w.-]{6,})/i);
       if (!value || !op) return null;
       if (isOwn(ctx.nombre, name)) return { descartar: "transferencia a vos mismo" };
-      return { tipo: "gasto", monto: amount(value[1]), moneda: "ARS", descripcion: name ? "Transferencia a " + titleCase(name) : "Transferencia", categoria: "transferencias", opRef: op[1], idExterno: "uala:" + op[1] };
+      return { tipo: "gasto", monto: amount(value[1]), moneda: "ARS", descripcion: name ? "Transferencia a " + titleCase(name) : "Transferencia", categoria: "transferencias", opRef: op[1], idExterno: "uala:" + op[1], contraparte: { nombre: name ? titleCase(name) : undefined, ref: ref?.[1] } };
     },
   },
   {
@@ -78,7 +79,8 @@ export const LECTORES_MAIL: Lector[] = [
       const raw = to ? to[1].trim() : "";
       if (raw && isOwn(ctx.nombre, raw)) return { descartar: "transferencia a vos mismo" };
       const name = raw.includes(",") ? raw.split(",").slice(1).join(" ").trim() + " " + raw.split(",")[0].trim() : raw;
-      return { tipo: "gasto", monto: amount(value[1]), moneda: "ARS", descripcion: name ? "Transferencia a " + titleCase(name) : "Transferencia (Mercado Pago)", categoria: "transferencias" };
+      const ref = aviso.texto.match(/(?:CBU|CVU|Alias):?\s+([\w.-]{6,})/i);
+      return { tipo: "gasto", monto: amount(value[1]), moneda: "ARS", descripcion: name ? "Transferencia a " + titleCase(name) : "Transferencia (Mercado Pago)", categoria: "transferencias", contraparte: { nombre: name ? titleCase(name) : undefined, ref: ref?.[1] } };
     },
   },
   {
@@ -88,7 +90,7 @@ export const LECTORES_MAIL: Lector[] = [
       const data = aviso.texto.match(/transferencia a (.+?) por \$\s*([\d.,]+)/i);
       if (!data) return null;
       if (isOwn(ctx.nombre, data[1])) return { descartar: "transferencia a vos mismo" };
-      return { tipo: "gasto", monto: amount(data[2]), moneda: "ARS", descripcion: "Transferencia a " + titleCase(data[1].trim()) + " (Nación)", categoria: "transferencias" };
+      return { tipo: "gasto", monto: amount(data[2]), moneda: "ARS", descripcion: "Transferencia a " + titleCase(data[1].trim()) + " (Nación)", categoria: "transferencias", contraparte: { nombre: titleCase(data[1].trim()) } };
     },
   },
   {
@@ -98,7 +100,7 @@ export const LECTORES_MAIL: Lector[] = [
       const data = aviso.texto.match(/transferencia al CBU\/CVU\/alias\s+(\S+)\s+por\s+\$\s*([\d.,]+)/i);
       if (!data) return null;
       if (isOwn(ctx.nombre, data[1])) return { descartar: "transferencia a vos mismo" };
-      return { tipo: "gasto", monto: amount(data[2]), moneda: "ARS", descripcion: "Transferencia a " + data[1] + " (Macro)", categoria: "transferencias" };
+      return { tipo: "gasto", monto: amount(data[2]), moneda: "ARS", descripcion: "Transferencia a " + data[1] + " (Macro)", categoria: "transferencias", contraparte: { ref: data[1] } };
     },
   },
   {

@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { dayLabel, money } from "../../../../shared/format";
 import { currentCycle, cycleText, inCycle } from "../../../../shared/cobro";
 import { findCategory } from "../../../../shared/categorias";
-import type { Movement } from "../../../../shared/movimientos";
+import { counts, type Movement } from "../../../../shared/movimientos";
 import { useAuth } from "../../lib/auth";
 import { useMiCobro } from "../../lib/cobro";
 import { useCategories } from "../../lib/categories";
@@ -30,13 +30,13 @@ export default function Movements() {
 
   const visible = useMemo(() => {
     const text = query.trim().toLowerCase();
-    return data.movements.filter((item) => {
+    return data.listed.filter((item) => {
       if (!inCycle(item.date, month, cobro)) return false;
       if (filter !== "todos" && item.type !== filter) return false;
       if (!text) return true;
       return item.description.toLowerCase().includes(text) || findCategory(categories, item.type, item.category).name.toLowerCase().includes(text);
     });
-  }, [data.movements, month, filter, query, categories, cobro]);
+  }, [data.listed, month, filter, query, categories, cobro]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, Movement[]>();
@@ -44,8 +44,8 @@ export default function Movements() {
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [visible]);
 
-  const income = visible.filter((item) => item.type === "ingreso").reduce((sum, item) => sum + item.amount, 0);
-  const expense = visible.filter((item) => item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
+  const income = visible.filter((item) => counts(item) && item.type === "ingreso").reduce((sum, item) => sum + item.amount, 0);
+  const expense = visible.filter((item) => counts(item) && item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
 
   return (
     <View style={{ flex: 1 }}>

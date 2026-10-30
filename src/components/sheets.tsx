@@ -1,16 +1,20 @@
 import { useState } from "react";
 import { Check, Search, Trash2 } from "lucide-react";
 import { Sheet, Tabs, sheetField as field, sheetLabel as label } from "./ui";
-import { COLORS } from "../lib/categories";
+import { COLORS, ICONS } from "../lib/categories";
 import { money, monthLabel, parseAmount, shiftMonth } from "../lib/format";
 import { installmentNumber, type CardItem, type CardItemKind, type CreditCard } from "../lib/cards";
 import { KIND_LABELS, PROVIDERS, initials, logoUrl, resolveProvider, type Provider } from "../lib/providers";
 
 // Ícono del banco o billetera: se carga desde su web oficial. Mientras carga (o si no hay), se ven las iniciales.
 export function ProviderIcon({ name, color, size = 40, provider }: { name: string; color: string; size?: number; provider?: string | null }) {
-  const domain = resolveProvider(provider, name)?.domain;
+  const resolved = resolveProvider(provider, name);
+  const domain = resolved?.domain;
   const [state, setState] = useState<"loading" | "ok" | "failed">("loading");
   const showLogo = Boolean(domain) && state === "ok";
+  // Servicios sin marca (alquiler, expensas…): su ícono sobre el color.
+  const ServiceIcon = !domain && resolved?.icon ? ICONS[resolved.icon] : null;
+  if (ServiceIcon) return <span className="flex shrink-0 items-center justify-center rounded-2xl text-white" style={{ backgroundColor: color, width: size, height: size }}><ServiceIcon size={Math.round(size * 0.5)} /></span>;
   return (
     <span className={"relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl font-bold " + (showLogo ? "bg-white ring-1 ring-black/5" : "text-white")} style={{ backgroundColor: showLogo ? undefined : color, width: size, height: size, fontSize: Math.round(size * 0.36) }}>
       {!showLogo && initials(name)}

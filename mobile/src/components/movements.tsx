@@ -3,9 +3,14 @@ import { Alert, Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { dayLabel, money, timeLabel, usd } from "../../../shared/format";
 import { findCategory, type Category } from "../../../shared/categorias";
+import { findPayee } from "../../../shared/destinatarios";
+import { findProvider } from "../../../shared/providers";
 import { hasDetail, originLabel, type Movement } from "../../../shared/movimientos";
+import { useAuth } from "../lib/auth";
+import { usePayees } from "../lib/payees";
 import { useColors } from "../lib/theme";
 import { Icon } from "./Icon";
+import { ProviderIcon } from "./ProviderIcon";
 import { Button, Card, CategoryIcon, IconButton, T, styles } from "./ui";
 
 // Confirmación antes de borrar (no hay deshacer).
@@ -30,6 +35,17 @@ export function Origin({ item, lines = 1 }: { item: Movement; lines?: number }) 
   );
 }
 
+// Ícono del destinatario si se le eligió uno; en las transferencias, el logo de la cuenta; si no, la categoría.
+function Leading({ item, category }: { item: Movement; category: Category }) {
+  const { session } = useAuth();
+  const { payees } = usePayees(session?.user.id ?? "");
+  const payee = findPayee(payees, item);
+  const provider = findProvider(item.source);
+  if (payee?.icon) return <CategoryIcon category={{ icon: payee.icon, color: payee.color ?? category.color }} size={32} />;
+  if (item.category === "transferencias" && provider) return <ProviderIcon name={provider.name} color={provider.color} provider={provider.id} size={32} />;
+  return <CategoryIcon category={category} size={32} />;
+}
+
 export function MovementRow({ item, categories, onTogglePaid, onRemove, showDay }: { item: Movement; categories: Category[]; onTogglePaid?: (item: Movement) => void; onRemove?: (item: Movement) => void; showDay?: boolean }) {
   const colors = useColors();
   const category = findCategory(categories, item.type, item.category);
@@ -42,17 +58,15 @@ export function MovementRow({ item, categories, onTogglePaid, onRemove, showDay 
           style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 2, alignItems: "center", justifyContent: "center", borderColor: item.paid ? colors.income : colors.border, backgroundColor: item.paid ? colors.income : "transparent" }}>
           {item.paid ? <Icon name="Check" size={16} color="#ffffff" /> : null}
         </Pressable>
-      ) : <CategoryIcon category={category} size={32} />}
-      {/* Lo que vino de un mail se abre para corregirlo o volver a leer el mail. */}
-      <Pressable disabled={!item.fromMail} onPress={() => router.push({ pathname: "/agregar", params: { id: item.id } })}
-        accessibilityRole={item.fromMail ? "button" : undefined} accessibilityHint={item.fromMail ? "Abre el movimiento para corregirlo o volver a leer el mail" : undefined}
+      ) : <Leading item={item} category={category} />}
+      <Pressable onPress={() => router.push({ pathname: "/movimiento", params: { id: item.id } })} accessibilityRole="button" accessibilityHint="Abre el detalle del movimiento"
         style={[styles.row, { flex: 1, minWidth: 0 }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <T numberOfLines={1} color={pending ? colors.muted : undefined} style={{ fontWeight: "500" }}>{title}{pending ? " · pendiente" : ""}</T>
+          <T numberOfLines={1} color={pending ? colors.muted : undefined} style={{ fontWeight: "500" }}>{title}{pending ? " · pendiente" : ""}{item.excluded ? " · no cuenta" : ""}</T>
           <T variant="small" numberOfLines={1}>{showDay ? dayLabel(item.date) + " · " : ""}{timeLabel(item.createdAt)}{item.currency === "USD" && item.original !== null ? " · " + usd(item.original) + " a " + money(item.rate ?? 0) : ""}</T>
           <Origin item={item} />
         </View>
-        <Text style={{ fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"], color: item.type === "ingreso" ? colors.income : colors.text }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</Text>
+        <Text style={{ fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"], color: item.excluded ? colors.muted : item.type === "ingreso" ? colors.income : colors.text, textDecorationLine: item.excluded ? "line-through" : "none" }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</Text>
       </Pressable>
       {onRemove ? <IconButton icon="Trash2" label={"Eliminar " + title} onPress={() => confirmRemove(item, onRemove)} /> : null}
     </View>

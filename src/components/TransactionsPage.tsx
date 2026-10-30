@@ -3,10 +3,14 @@ import { Download, Search, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "./AuthGate";
 import { CategoryIcon, Card, ErrorBox, MonthPicker, Tabs } from "./ui";
+import MovementDetail from "./MovementDetail";
+import { ProviderIcon } from "./sheets";
 import { findCategory, useCategories, type Category } from "../lib/categories";
 import { dayLabel, money, timeLabel, usd } from "../lib/format";
 import { currentCycle, cycleText, inCycle } from "../../shared/cobro";
-import { hasDetail, useMovements, type Movement } from "../lib/movements";
+import { counts, hasDetail, useMovements, type Movement } from "../lib/movements";
+import { findPayee, usePayees } from "../lib/payees";
+import { findProvider } from "../lib/providers";
 import { Origin, RereadButton, ReviewCard } from "./ReviewCard";
 
 type Filter = "todos" | "gasto" | "ingreso";
@@ -35,7 +39,11 @@ function downloadCsv(rows: Movement[], categories: Category[], fileName: string)
 
 export default function TransactionsPage() {
   const { user, cobro } = useAuth();
-  const { movements, toReview, error, confirm, reread, remove } = useMovements(user.id);
+  const data = useMovements(user.id);
+  const { all, listed, toReview, error, confirm, reread, remove } = data;
+  const payees = usePayees(user.id);
+  const [detail, setDetail] = useState<string | null>(null);
+  const open = all.find((item) => item.id === detail) ?? null;
   const { categories } = useCategories(user.id);
   const [month, setMonth] = useState(() => currentCycle(cobro));
   const [filter, setFilter] = useState<Filter>("todos");
@@ -43,14 +51,14 @@ export default function TransactionsPage() {
 
   const visible = useMemo(() => {
     const text = query.trim().toLowerCase();
-    return movements.filter((item) => {
+    return listed.filter((item) => {
       if (!inCycle(item.date, month, cobro)) return false;
       if (filter !== "todos" && item.type !== filter) return false;
       if (!text) return true;
       const category = findCategory(categories, item.type, item.category);
-      return item.description.toLowerCase().includes(text) || category.name.toLowerCase().includes(text);
+      return item.description.toLowerCase().includes(text) || category.name.toLowerCase().includes(text) || (item.note ?? "").toLowerCase().includes(text) || (item.place.name ?? "").toLowerCase().includes(text);
     });
-  }, [movements, month, filter, query, categories, cobro]);
+  }, [listed, month, filter, query, categories, cobro]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, Movement[]>();
@@ -58,13 +66,13 @@ export default function TransactionsPage() {
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [visible]);
 
-  const income = visible.filter((item) => item.type === "ingreso").reduce((sum, item) => sum + item.amount, 0);
-  const expense = visible.filter((item) => item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
+  const income = visible.filter((item) => counts(item) && item.type === "ingreso").reduce((sum, item) => sum + item.amount, 0);
+  const expense = visible.filter((item) => counts(item) && item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <ErrorBox message={error} />
-      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} onReread={reread} />
+      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} onReread={reread} onOpen={(item) => setDetail(item.id)} />
       <MonthPicker month={month} detail={cycleText(month, cobro)} onChange={setMonth} />
       <Tabs value={filter} onChange={setFilter} options={[{ value: "todos", label: "Todos" }, { value: "gasto", label: "Gastos" }, { value: "ingreso", label: "Ingresos" }]} />
       <div className="flex gap-2">
@@ -89,14 +97,18 @@ export default function TransactionsPage() {
           <div className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--surface)]">
             {items.map((item) => {
               const category = findCategory(categories, item.type, item.category);
+              const payee = findPayee(payees.payees, item);
+              const provider = item.category === "transferencias" ? findProvider(item.source) : null;
               return (
-                <div key={item.id} className="flex items-center gap-3 p-3 sm:p-4">
-                  <CategoryIcon category={category} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold"><span style={{ color: category.color }}>{category.name}</span>{hasDetail(item, category.name) && <span> ({item.description})</span>}</p>
-                    <p className="text-xs text-[var(--muted)]">{timeLabel(item.createdAt)} hs{item.type === "gasto" && !item.paid && " · pendiente de pago"}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}<Origin item={item} /></p>
-                  </div>
-                  <span className="shrink-0 font-bold tabular-nums" style={{ color: item.type === "ingreso" ? "var(--income)" : "var(--text)" }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</span>
+                <div key={item.id} className={"flex items-center gap-3 p-3 sm:p-4 " + (item.excluded ? "opacity-60" : "")}>
+                  <button type="button" onClick={() => setDetail(item.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-label={"Ver el detalle de " + (item.description || category.name)}>
+                    {payee?.icon ? <CategoryIcon category={{ icon: payee.icon, color: payee.color ?? category.color }} /> : provider ? <ProviderIcon name={provider.name} color={provider.color} provider={provider.id} /> : <CategoryIcon category={category} />}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold"><span style={{ color: category.color }}>{category.name}</span>{hasDetail(item, category.name) && <span> ({item.description})</span>}</span>
+                      <span className="block text-xs text-[var(--muted)]">{timeLabel(item.createdAt)} hs{item.excluded && " · no es un gasto"}{item.place.name && " · " + item.place.name}{item.type === "gasto" && !item.paid && " · pendiente de pago"}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}<Origin item={item} /></span>
+                    </span>
+                    <span className={"shrink-0 font-bold tabular-nums " + (item.excluded ? "line-through" : "")} style={{ color: item.type === "ingreso" ? "var(--income)" : "var(--text)" }}>{item.type === "ingreso" ? "+" : "−"}{money(item.amount)}</span>
+                  </button>
                   <RereadButton item={item} onReread={reread} />
                 </div>
               );
@@ -104,6 +116,7 @@ export default function TransactionsPage() {
           </div>
         </section>
       ))}
+      {open && <MovementDetail key={open.id} item={open} categories={categories} data={data} payees={payees} onClose={() => setDetail(null)} />}
     </div>
   );
 }

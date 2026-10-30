@@ -31,6 +31,7 @@ function Root() {
         <Stack.Screen name="agregar" options={{ presentation: "modal" }} />
         <Stack.Screen name="pagar" options={{ presentation: "modal" }} />
         <Stack.Screen name="fijo" options={{ presentation: "modal" }} />
+        <Stack.Screen name="movimiento" options={{ presentation: "modal" }} />
         <Stack.Screen name="tarjeta" options={{ presentation: "modal" }} />
         <Stack.Screen name="cuota" options={{ presentation: "modal" }} />
         <Stack.Screen name="fijos" />
