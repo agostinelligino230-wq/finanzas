@@ -1,9 +1,10 @@
 // Bancos, billeteras y tarjetas que se pueden agregar.
 // "auto" dice qué se trae solo leyendo los mails de esa cuenta (si no tiene, se carga a mano).
 
-export type ProviderKind = "billetera" | "banco" | "tarjeta";
+export type ProviderKind = "billetera" | "banco" | "tarjeta" | "servicio";
 // "domain" es la web oficial: de ahí se muestra su ícono (si no carga, se ven las iniciales).
-export type Provider = { id: string; name: string; kind: ProviderKind; color: string; domain?: string; auto?: string };
+// "icon": los servicios sin marca (alquiler, expensas…) usan un ícono de la grilla. "fixedKind": el tipo de gasto fijo que les toca.
+export type Provider = { id: string; name: string; kind: ProviderKind; color: string; domain?: string; auto?: string; icon?: string; fixedKind?: "impuesto" | "suscripcion" | "alquiler" | "servicio" | "otro" };
 
 export const PROVIDERS: Provider[] = [
   { id: "uala", name: "Ualá", kind: "billetera", color: "#2F80ED", domain: "uala.com.ar", auto: "Transferencias que hacés y el resumen de la tarjeta" },
@@ -43,9 +44,26 @@ export const PROVIDERS: Provider[] = [
   { id: "cencosud", name: "Tarjeta Cencosud", kind: "tarjeta", color: "#169C8C", domain: "tarjetacencosud.com.ar" },
   { id: "shopping", name: "Tarjeta Shopping", kind: "tarjeta", color: "#E0475F", domain: "tarjetashopping.com.ar" },
   { id: "cabal", name: "Cabal", kind: "tarjeta", color: "#2F80ED", domain: "cabal.coop" },
+  { id: "edenor", name: "Edenor", kind: "servicio", color: "#F5B72E", domain: "edenor.com", fixedKind: "servicio" },
+  { id: "metrogas", name: "Metrogas", kind: "servicio", color: "#2F80ED", domain: "metrogas.com.ar", fixedKind: "servicio" },
+  { id: "aysa", name: "AySA", kind: "servicio", color: "#169C8C", domain: "aysa.com.ar", fixedKind: "servicio" },
+  { id: "personal", name: "Personal", kind: "servicio", color: "#2F80ED", domain: "personal.com.ar", fixedKind: "servicio" },
+  { id: "movistar", name: "Movistar", kind: "servicio", color: "#2F80ED", domain: "movistar.com.ar", fixedKind: "servicio" },
+  { id: "claro", name: "Claro", kind: "servicio", color: "#E0475F", domain: "claro.com.ar", fixedKind: "servicio" },
+  { id: "netflix", name: "Netflix", kind: "servicio", color: "#E0475F", domain: "netflix.com", fixedKind: "suscripcion" },
+  { id: "spotify", name: "Spotify", kind: "servicio", color: "#3BB273", domain: "spotify.com", fixedKind: "suscripcion" },
+  { id: "disney", name: "Disney+", kind: "servicio", color: "#3D4A63", domain: "disneyplus.com", fixedKind: "suscripcion" },
+  { id: "youtube", name: "YouTube", kind: "servicio", color: "#E0475F", domain: "youtube.com", fixedKind: "suscripcion" },
+  { id: "alquiler", name: "Alquiler", kind: "servicio", color: "#3BB273", icon: "Home", fixedKind: "alquiler" },
+  { id: "expensas", name: "Expensas", kind: "servicio", color: "#9C6B4E", icon: "Building2", fixedKind: "alquiler" },
+  { id: "prepaga", name: "Prepaga", kind: "servicio", color: "#D94FA6", icon: "HeartPulse", fixedKind: "servicio" },
+  { id: "gimnasio", name: "Gimnasio", kind: "servicio", color: "#F08C2E", icon: "Dumbbell", fixedKind: "suscripcion" },
+  { id: "seguro", name: "Seguro", kind: "servicio", color: "#607D8B", icon: "ShieldCheck", fixedKind: "servicio" },
+  { id: "colegio", name: "Colegio", kind: "servicio", color: "#5B6CF0", icon: "GraduationCap", fixedKind: "servicio" },
 ];
 
-export const KIND_LABELS: Record<ProviderKind, string> = { billetera: "Billeteras", banco: "Bancos", tarjeta: "Tarjetas" };
+export const KIND_LABELS: Record<ProviderKind, string> = { billetera: "Billeteras", banco: "Bancos", tarjeta: "Tarjetas", servicio: "Servicios" };
+export const SERVICE_PROVIDERS = PROVIDERS.filter((provider) => provider.kind === "servicio");
 
 export const logoUrl = (domain: string) => "https://www.google.com/s2/favicons?domain=" + domain + "&sz=128";
 

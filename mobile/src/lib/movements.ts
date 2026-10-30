@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MOVEMENT_COLUMNS, counts, fromRow, rereadErrorMessage, sortMovements, type Movement, type MovementRow, type NewMovement } from "../../../shared/movimientos";
+import { MOVEMENT_COLUMNS, counts, fromRow, isListed, needsReview, rereadErrorMessage, sortMovements, type Movement, type MovementRow, type NewMovement } from "../../../shared/movimientos";
 import { toast } from "../components/Toast";
 import { supabase } from "./supabase";
 
@@ -66,7 +66,8 @@ export function useMovements(userId: string) {
   }, [userId]);
 
   const movements = useMemo(() => all.filter(counts), [all]);
-  const toReview = useMemo(() => all.filter((item) => !counts(item)), [all]);
+  const toReview = useMemo(() => all.filter(needsReview), [all]);
+  const listed = useMemo(() => all.filter(isListed), [all]);
 
   const add = async (input: NewMovement) => {
     if (!supabase) return false;
@@ -128,12 +129,83 @@ export function useMovements(userId: string) {
     return "";
   };
 
+  const patch = (item: Movement, changes: Partial<Movement>) => set((current) => current.map((entry) => (entry.id === item.id ? { ...entry, ...changes } : entry)));
+
+  // Lo que se edita en el detalle: categoría y nota.
+  const saveDetail = async (item: Movement, input: { category: string; note: string | null }) => {
+    if (!supabase) return false;
+    const { error: saveError } = await supabase.from("movements").update({ category: input.category, note: input.note }).eq("id", item.id);
+    if (saveError) { toast("No se pudo guardar. Revisá tu conexión."); return false; }
+    patch(item, input);
+    return true;
+  };
+
+  // «No es un gasto» (pase entre cuentas propias): sigue en la lista, pero no suma.
+  const setExcluded = async (item: Movement, excluded: boolean) => {
+    if (!supabase) return false;
+    const { error: saveError } = await supabase.from("movements").update({ excluded }).eq("id", item.id);
+    if (saveError) { toast("No se pudo guardar. Revisá tu conexión."); return false; }
+    patch(item, { excluded });
+    return true;
+  };
+
+  const setPlace = async (item: Movement, input: { lat: number | null; lng: number | null; name: string; address: string }) => {
+    if (!supabase) return false;
+    const { error: saveError } = await supabase.rpc("set_movement_place", { p_id: item.id, p_lat: input.lat, p_lng: input.lng, p_place_name: input.name, p_place_address: input.address });
+    if (saveError) { toast("No se pudo guardar el lugar. Revisá tu conexión."); return false; }
+    patch(item, { place: { ...item.place, lat: input.lat, lng: input.lng, name: input.name || null, address: input.address || null, at: item.place.at ?? new Date().toISOString() } });
+    return true;
+  };
+
+  const split = async (item: Movement, amount: number, category: string) => {
+    if (!supabase) return false;
+    const { error: saveError } = await supabase.rpc("split_movement", { p_id: item.id, p_amount: amount, p_category: category });
+    if (saveError) { toast("No se pudo dividir. Revisá tu conexión."); return false; }
+    await reload();
+    return true;
+  };
+
+  // Foto del ticket: bucket privado, una carpeta por persona.
+  const attachPhoto = async (item: Movement, uri: string, contentType: string) => {
+    if (!supabase) return false;
+    try {
+      const body = await fetch(uri).then((response) => response.arrayBuffer());
+      const path = userId + "/" + item.id + "-" + Date.now() + "." + (contentType.split("/")[1] ?? "jpeg");
+      const { error: uploadError } = await supabase.storage.from("tickets").upload(path, body, { contentType });
+      if (uploadError) throw uploadError;
+      const { error: saveError } = await supabase.from("movements").update({ photo_path: path }).eq("id", item.id);
+      if (saveError) { await supabase.storage.from("tickets").remove([path]); throw saveError; }
+      if (item.photoPath) await supabase.storage.from("tickets").remove([item.photoPath]);
+      patch(item, { photoPath: path });
+      return true;
+    } catch {
+      toast("No se pudo subir la foto. Revisá tu conexión.");
+      return false;
+    }
+  };
+
+  const removePhoto = async (item: Movement) => {
+    if (!supabase || !item.photoPath) return;
+    const { error: saveError } = await supabase.from("movements").update({ photo_path: null }).eq("id", item.id);
+    if (saveError) { toast("No se pudo quitar la foto. Revisá tu conexión."); return; }
+    await supabase.storage.from("tickets").remove([item.photoPath]);
+    patch(item, { photoPath: null });
+  };
+
+  // El bucket es privado: la foto se ve con un enlace que dura una hora.
+  const photoLink = async (path: string) => {
+    if (!supabase) return null;
+    const { data } = await supabase.storage.from("tickets").createSignedUrl(path, 3600);
+    return data?.signedUrl ?? null;
+  };
+
   const remove = async (item: Movement) => {
     if (!supabase) return;
     const { error: saveError } = await supabase.from("movements").delete().eq("id", item.id);
     if (saveError) { toast("No se pudo borrar «" + item.description + "». Revisá tu conexión.", { action: { label: "Reintentar", onPress: () => remove(item) } }); return; }
+    if (item.photoPath) await supabase.storage.from("tickets").remove([item.photoPath]);
     set((current) => current.filter((entry) => entry.id !== item.id));
   };
 
-  return { all, loaded, movements, toReview, error, refreshing, add, update, reread, togglePaid, confirm, remove, reload };
+  return { all, loaded, movements, toReview, listed, saveDetail, setExcluded, setPlace, split, attachPhoto, removePhoto, photoLink, error, refreshing, add, update, reread, togglePaid, confirm, remove, reload };
 }

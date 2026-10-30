@@ -11,9 +11,10 @@ export type Aviso = {
   proveedor?: string;   // push: la entidad del paquete (ya se sabe antes de leer)
   autenticacion?: string[]; // mail: encabezados Authentication-Results, en orden
   dispositivo?: string; // push: id del celular
+  ubicacion?: { lat: number; lng: number; precision: number | null }; // push: dónde estaba el celular cuando llegó el aviso
 };
 
-export type Movimiento = { tipo: "gasto" | "ingreso"; monto: number; moneda: "ARS" | "USD"; descripcion: string; categoria: string; opRef?: string; idExterno?: string };
+export type Movimiento = { tipo: "gasto" | "ingreso"; monto: number; moneda: "ARS" | "USD"; descripcion: string; categoria: string; opRef?: string; idExterno?: string; contraparte?: { nombre?: string; ref?: string } };
 export type Resumen = { provider: string; card: string; color: string; month: string; due_date: string; total: number; total_usd: number };
 
 export type Lectura =

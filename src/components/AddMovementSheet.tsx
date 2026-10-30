@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Check, Plus, X } from "lucide-react";
-import { COLORS, ICON_GROUPS, ICONS, type Category } from "../lib/categories";
+import { Plus, X } from "lucide-react";
+import { COLORS, type Category } from "../lib/categories";
 import { daysAgoISO, money, parseAmount, todayISO, usd } from "../lib/format";
 import type { Currency, MovementType, NewMovement } from "../lib/movements";
 import { getDollarQuote, type DollarQuote } from "../lib/dollar";
 import { CategoryIcon, Tabs } from "./ui";
+import IconColorPicker from "./IconColorPicker";
 
 type Props = {
   open: boolean;
@@ -38,22 +39,7 @@ function CategoryCreator({ kind, onCreate, onCancel }: { kind: MovementType; onC
         <CategoryIcon category={{ icon, color }} size={44} />
         <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder={kind === "gasto" ? "Ej.: Plataformas" : "Ej.: Alquiler cobrado"} className={field + " bg-[var(--surface)]"} />
       </div>
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Color</p>
-        <div className="flex flex-wrap gap-2">
-          {COLORS.map((value) => <button key={value} type="button" onClick={() => setColor(value)} aria-label={"Color " + value} className="flex h-8 w-8 items-center justify-center rounded-full text-white" style={{ backgroundColor: value }}>{color === value && <Check size={16} />}</button>)}
-        </div>
-      </div>
-      <div className="max-h-56 space-y-3 overflow-y-auto pr-1">
-        {ICON_GROUPS.map((group) => (
-          <div key={group.label}>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{group.label}</p>
-            <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
-              {group.icons.map((name) => { const Icon = ICONS[name]; const active = icon === name; return <button key={name} type="button" onClick={() => setIcon(name)} aria-label={name} className="flex aspect-square items-center justify-center rounded-full border" style={active ? { backgroundColor: color, borderColor: color, color: "#fff" } : { borderColor: "var(--border)" }}><Icon size={18} /></button>; })}
-            </div>
-          </div>
-        ))}
-      </div>
+      <IconColorPicker icon={icon} color={color} onIcon={setIcon} onColor={setColor} />
       {error && <p className="text-sm text-[var(--expense)]">{error}</p>}
       <div className="flex gap-2">
         <button type="button" onClick={onCancel} className="h-11 flex-1 rounded-2xl border border-[var(--border)] font-semibold">Cancelar</button>

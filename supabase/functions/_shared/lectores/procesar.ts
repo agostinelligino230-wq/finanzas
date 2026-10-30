@@ -89,6 +89,8 @@ export async function procesarAviso(admin: SupabaseClient, aviso: Aviso, ctx: Co
   const movement = {
     type: lectura.tipo, amount: pesos, currency: lectura.moneda, original, rate, description: lectura.descripcion.slice(0, 120), category: lectura.categoria,
     source: ent.id, external_id: externalId, op_ref: lectura.opRef ?? null, date: day(aviso.recibido), datetime: aviso.recibido.toISOString(), trust,
+    counterparty_name: lectura.contraparte?.nombre ?? null, counterparty_ref: lectura.contraparte?.ref ?? null,
+    lat: aviso.ubicacion?.lat ?? null, lng: aviso.ubicacion?.lng ?? null, accuracy_m: aviso.ubicacion?.precision ?? null,
   };
   const saved = await ingest(admin, ctx.userId, movement, notice);
   // Movimiento nuevo por mail: aviso propio de la app (si llegó por notificación, el banco ya avisó).

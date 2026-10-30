@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Baby, Banknote, Beer, Bike, BookOpen, Briefcase, Building2, Bus, Car, Cigarette, Coffee, Coins, CreditCard, Dog, Droplets, Dumbbell, Film, Flame, Fuel, Gamepad2, Gift,
-  GraduationCap, Hammer, HandCoins, HeartPulse, HelpCircle, Home, Landmark, Laptop, Music, Package, Palette, Percent, PiggyBank, Pill, Pizza, Plane, Receipt, Scissors, Shirt,
+  GraduationCap, Hammer, HandCoins, HeartPulse, HelpCircle, Home, Landmark, Laptop, Music, Package, Palette, Percent, PiggyBank, Pill, Pizza, Plane, Receipt, Scissors, ShieldCheck, Shirt,
   ShoppingBag, ShoppingCart, Smartphone, Sofa, Sparkles, Stethoscope, Store, Tag, Ticket, Train, Trees, TrendingUp, Tv, Utensils, Wallet, Wifi, Wrench, Zap, type LucideIcon,
 } from "lucide-react";
 import { supabase } from "./supabase";
@@ -11,7 +11,7 @@ import { DEFAULT_CATEGORIES, categoryFromRow, type Category, type CategoryRow } 
 
 export const ICONS: Record<string, LucideIcon> = {
   Baby, Banknote, Beer, Bike, BookOpen, Briefcase, Building2, Bus, Car, Cigarette, Coffee, Coins, CreditCard, Dog, Droplets, Dumbbell, Film, Flame, Fuel, Gamepad2, Gift,
-  GraduationCap, Hammer, HandCoins, HeartPulse, HelpCircle, Home, Landmark, Laptop, Music, Package, Palette, Percent, PiggyBank, Pill, Pizza, Plane, Receipt, Scissors, Shirt,
+  GraduationCap, Hammer, HandCoins, HeartPulse, HelpCircle, Home, Landmark, Laptop, Music, Package, Palette, Percent, PiggyBank, Pill, Pizza, Plane, Receipt, Scissors, ShieldCheck, Shirt,
   ShoppingBag, ShoppingCart, Smartphone, Sofa, Sparkles, Stethoscope, Store, Tag, Ticket, Train, Trees, TrendingUp, Tv, Utensils, Wallet, Wifi, Wrench, Zap,
 };
 

@@ -8,17 +8,23 @@ export type Currency = "ARS" | "USD";
 // doubtful: llegó sin un aviso verificado; no suma hasta que lo confirmes.
 export type Trust = "manual" | "legacy" | "verified" | "doubtful";
 export type Channel = "mail" | "push";
+export type Place = { lat: number | null; lng: number | null; accuracy: number | null; name: string | null; address: string | null; at: string | null };
 // "amount" siempre está en pesos. Si se cargó en dólares, "original" y "rate" guardan el monto en US$ y la cotización usada.
 export type Movement = {
   id: string; description: string; amount: number; category: string; date: string; createdAt: string; type: MovementType; paid: boolean;
   currency: Currency; original: number | null; rate: number | null; source: string | null; trust: Trust; confirmedAt: string | null; channels: Channel[];
   readByAI: boolean; // Lo leyó la IA de respaldo (ningún lector propio lo reconoció): se avisa siempre.
   fromMail: boolean; // Salió de un mail: se puede volver a leer con los lectores de hoy.
+  note: string | null; photoPath: string | null; place: Place; opRef: string | null;
+  counterpartyName: string | null; counterpartyRef: string | null; // Con quién fue y su CBU, CVU o alias, si el aviso lo trae.
+  excluded: boolean; // «No es un gasto» (pase entre cuentas propias): se ve, pero no suma.
 };
 export type NewMovement = { description: string; amount: number; category: string; date: string; type: MovementType; paid: boolean; currency?: Currency; original?: number | null; rate?: number | null };
 export type MovementRow = {
   id: string; description: string; amount: number | string; category: string; movement_type: MovementType; movement_date: string; paid: boolean; created_at: string;
   currency?: string | null; original_amount?: number | string | null; exchange_rate?: number | string | null; source?: string | null; external_id?: string | null;
+  note?: string | null; photo_path?: string | null; lat?: number | null; lng?: number | null; accuracy_m?: number | null; place_name?: string | null; place_address?: string | null; located_at?: string | null;
+  op_ref?: string | null; counterparty_name?: string | null; counterparty_ref?: string | null; excluded?: boolean | null;
   trust?: string | null; confirmed_at?: string | null; incoming_notices?: { channel: string; parser?: string | null }[] | null;
 };
 
@@ -35,6 +41,8 @@ export const fromRow = (row: MovementRow): Movement => ({
   channels: [...new Set((row.incoming_notices ?? []).map((notice) => notice.channel))].filter((channel): channel is Channel => channel === "mail" || channel === "push").sort(),
   readByAI: (row.incoming_notices ?? []).some((notice) => notice.parser === "ai") && !(row.incoming_notices ?? []).some((notice) => notice.parser === "rule"),
   fromMail: (row.incoming_notices ?? []).some((notice) => notice.channel === "mail") || (row.external_id ?? "").startsWith("mail:"),
+  note: row.note ?? null, photoPath: row.photo_path ?? null, opRef: row.op_ref ?? null, counterpartyName: row.counterparty_name ?? null, counterpartyRef: row.counterparty_ref ?? null, excluded: Boolean(row.excluded),
+  place: { lat: row.lat ?? null, lng: row.lng ?? null, accuracy: row.accuracy_m ?? null, name: row.place_name ?? null, address: row.place_address ?? null, at: row.located_at ?? null },
 });
 
 // Por qué no se pudo volver a leer el mail de un movimiento (lo que contesta la función gmail con accion "releer").
@@ -57,7 +65,21 @@ export function rereadText(result: { movimientos?: number; corregidos?: number }
 }
 
 // Lo dudoso no suma (ni al saldo, ni a los gráficos, ni a la descarga) hasta que lo confirmes.
-export const counts = (item: Movement) => item.trust !== "doubtful" || item.confirmedAt !== null;
+// Lo marcado «no es un gasto» tampoco suma, pero sigue en la lista para poder deshacerlo.
+export const counts = (item: Movement) => !item.excluded && (item.trust !== "doubtful" || item.confirmedAt !== null);
+export const needsReview = (item: Movement) => !item.excluded && !counts(item);
+export const isListed = (item: Movement) => counts(item) || item.excluded;
+
+// De dónde se leyó, para el detalle: «Mail y aviso del celular», «Carga manual»…
+export function readFrom(item: Movement) {
+  if (item.channels.length === 2) return "Mail y aviso del celular";
+  if (item.channels[0] === "mail") return "Mail";
+  if (item.channels[0] === "push") return "Aviso del celular";
+  return item.trust === "manual" ? "Carga manual" : "Lectura automática";
+}
+
+// Lo que falta ubicar al abrir la app: gastos de las últimas 2 horas sin lugar.
+export const unlocated = (list: Movement[], now = Date.now()) => list.filter((item) => item.type === "gasto" && !item.place.name && now - Date.parse(item.createdAt) < 2 * 3600 * 1000);
 
 // "Verificado · notificación y mail de Galicia", "desde Ualá"…
 export function originLabel(item: Movement) {

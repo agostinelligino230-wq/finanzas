@@ -1,22 +1,29 @@
 import { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, CalendarClock, Check, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, BellRing, CalendarClock, Check, ChevronDown, Plus, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "./AuthGate";
 import AddMovementSheet from "./AddMovementSheet";
 import { CategoryIcon, Card, ErrorBox, MonthPicker, StackedBar, Tabs } from "./ui";
 import { findCategory, useCategories } from "../lib/categories";
-import { dayLabel, monthLabel, money, timeLabel, usd } from "../lib/format";
+import { dayLabel, dayText, monthLabel, money, timeLabel, todayISO, usd } from "../lib/format";
 import { currentCycle, cycleText, inCycle } from "../../shared/cobro";
 import { cardMonthSummary, useCards, type CreditCard } from "../lib/cards";
 import StatementSources from "./StatementSources";
-import { useFixed, type FixedRowView } from "../lib/fixed";
+import { countedFixedRows, upcomingReminders, useFixed, type FixedRowView } from "../lib/fixed";
 import { PaySheet, ProviderIcon } from "./sheets";
 import { hasDetail, useMovements, type MovementType } from "../lib/movements";
+import { usePayees } from "../lib/payees";
 import { Origin, ReviewCard } from "./ReviewCard";
+import LocationPrompt from "./LocationPrompt";
+import MovementDetail from "./MovementDetail";
 
 export default function ExpensesPage() {
   const { user, cobro } = useAuth();
-  const { movements, toReview, error, add, togglePaid, confirm, reread, remove, reload } = useMovements(user.id);
+  const data = useMovements(user.id);
+  const { all, movements, toReview, error, add, togglePaid, confirm, reread, remove, reload, setPlace } = data;
+  const payees = usePayees(user.id);
+  const [detail, setDetail] = useState<string | null>(null);
+  const openItem = all.find((item) => item.id === detail) ?? null;
   const { categories, addCategory } = useCategories(user.id);
   const cardsData = useCards(user.id);
   const [month, setMonth] = useState(() => currentCycle(cobro));
@@ -31,7 +38,9 @@ export default function ExpensesPage() {
   const expense = monthItems.filter((item) => item.type === "gasto").reduce((sum, item) => sum + item.amount, 0);
   const available = income - expense;
   // Lo que falta pagar del mes: gastos fijos y tarjetas sin marcar como pagados.
-  const pendingFixed = fixed.rows.filter((row) => !row.paid && row.amount > 0);
+  const pendingFixed = countedFixedRows(fixed.rows, cardsData.statements, month).filter((row) => !row.paid && row.amount > 0);
+  // Los avisos de vencimiento se ven solo en el mes actual.
+  const reminders = month === currentCycle(cobro) ? upcomingReminders(fixed.rows, todayISO().slice(0, 7), todayISO()) : [];
   const pendingCards = cardsData.cards.map((card) => ({ card, summary: cardMonthSummary(cardsData.items, cardsData.statements, card.id, month, cardsData.payments) })).filter((entry) => !entry.summary.payment && entry.summary.total > 0);
   const pendingTotal = pendingFixed.reduce((sum, row) => sum + row.amount, 0) + pendingCards.reduce((sum, entry) => sum + entry.summary.total, 0);
   const hasObligations = fixed.rows.length > 0 || cardsData.cards.length > 0;
@@ -77,7 +86,22 @@ export default function ExpensesPage() {
 
       <ErrorBox message={error} />
 
-      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} onReread={reread} />
+      <ReviewCard items={toReview} onConfirm={confirm} onRemove={remove} onReread={reread} onOpen={(item) => setDetail(item.id)} />
+
+      {reminders.length > 0 && (
+        <Card>
+          <p className="flex items-center gap-2 font-semibold"><BellRing size={18} className="text-[var(--primary-text)]" />{reminders.length === 1 ? "Vence pronto" : "Vencen pronto"}</p>
+          <div className="mt-2 divide-y divide-[var(--border)]">
+            {reminders.map(({ row, due, days }) => (
+              <div key={row.item.id} className="flex items-center gap-3 py-2">
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{row.item.name}</span><span className="block text-xs text-[var(--muted)]">{days === 0 ? "Vence hoy" : days === 1 ? "Vence mañana" : "Vence en " + days + " días"} · {dayText(due)}</span></span>
+                <span className="text-sm font-semibold tabular-nums">{row.usd !== null ? usd(row.usd) : money(row.amount)}</span>
+                <button type="button" onClick={() => setPaying({ kind: "fijo", row })} className="h-8 rounded-full bg-[var(--primary-soft)] px-3 text-xs font-semibold text-[var(--primary-text)]">Pagar</button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <StatementSources userId={user.id} onlyPending />
 
@@ -92,7 +116,7 @@ export default function ExpensesPage() {
               <div className="mt-2 divide-y divide-[var(--border)]">
                 {pendingFixed.map((row) => (
                   <div key={row.item.id} className="flex items-center gap-3 py-2">
-                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{row.item.name}</span><span className="block text-xs text-[var(--muted)]">Gasto fijo · vence el {row.item.dueDay}</span></span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{row.item.name}</span><span className="block text-xs text-[var(--muted)]">Gasto fijo · vence el {row.item.dueDay}{row.usd !== null && " · " + usd(row.usd)}</span></span>
                     <span className="text-sm font-semibold tabular-nums">{money(row.amount)}</span>
                     <button type="button" onClick={() => setPaying({ kind: "fijo", row })} className="h-8 rounded-full bg-[var(--primary-soft)] px-3 text-xs font-semibold text-[var(--primary-text)]">Pagar</button>
                   </div>
@@ -158,10 +182,10 @@ export default function ExpensesPage() {
                         {item.type === "gasto" ? (
                           <button type="button" onClick={() => togglePaid(item)} className={"flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 " + (item.paid ? "border-[var(--income)] bg-[var(--income)] text-white" : "border-[var(--border)] text-transparent")} aria-label={item.paid ? "Marcar como pendiente" : "Marcar como pagado"}><Check size={16} /></button>
                         ) : <span className="w-8" />}
-                        <div className="min-w-0 flex-1">
-                          <p className={"truncate text-sm font-medium " + (item.type === "gasto" && !item.paid ? "text-[var(--muted)]" : "")}>{hasDetail(item, category.name) ? item.description : category.name}{item.type === "gasto" && !item.paid && " · pendiente"}</p>
-                          <p className="text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}<Origin item={item} /></p>
-                        </div>
+                        <button type="button" onClick={() => setDetail(item.id)} className="min-w-0 flex-1 text-left">
+                          <span className={"block truncate text-sm font-medium " + (item.type === "gasto" && !item.paid ? "text-[var(--muted)]" : "")}>{hasDetail(item, category.name) ? item.description : category.name}{item.type === "gasto" && !item.paid && " · pendiente"}</span>
+                          <span className="block text-xs text-[var(--muted)]">{dayLabel(item.date)} · {timeLabel(item.createdAt)}{item.place.name && " · " + item.place.name}{item.currency === "USD" && item.original !== null && <> · {usd(item.original)} a {money(item.rate ?? 0)}</>}<Origin item={item} /></span>
+                        </button>
                         <span className="shrink-0 text-sm font-semibold tabular-nums">{money(item.amount)}</span>
                         <button type="button" onClick={() => { if (window.confirm("¿Eliminar este movimiento?")) remove(item); }} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--expense-soft)] hover:text-[var(--expense)]" aria-label="Eliminar"><Trash2 size={16} /></button>
                       </div>
@@ -177,6 +201,8 @@ export default function ExpensesPage() {
       <button type="button" onClick={() => setAdding(true)} className="fixed bottom-24 right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-text)] shadow-xl transition hover:scale-105 lg:bottom-8 lg:right-8" aria-label="Agregar movimiento"><Plus size={30} strokeWidth={2.5} /></button>
       {paying?.kind === "fijo" && <PaySheet title={paying.row.item.name} month={month} suggested={paying.row.amount} onConfirm={async (amount, addToExpenses) => { const ok = await fixed.pay(paying.row, amount, addToExpenses); if (ok) reload(); return ok; }} onClose={() => setPaying(null)} />}
       {paying?.kind === "tarjeta" && <PaySheet title={"tarjeta " + paying.card.name} detail={"Resumen de " + monthLabel(month).toLowerCase()} month={month} suggested={paying.amount} onConfirm={async (amount, addToExpenses) => { const ok = await cardsData.payCard(paying.card, month, amount, addToExpenses); if (ok) reload(); return ok; }} onClose={() => setPaying(null)} />}
+      {openItem && <MovementDetail key={openItem.id} item={openItem} categories={categories} data={data} payees={payees} onClose={() => setDetail(null)} />}
+      <LocationPrompt userId={user.id} movements={movements} onSave={setPlace} />
       <AddMovementSheet open={adding} initialKind={tab} categories={categories} onAddCategory={addCategory} onSave={add} onClose={() => setAdding(false)} />
     </div>
   );

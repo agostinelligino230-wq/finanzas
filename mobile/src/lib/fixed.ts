@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { shiftMonth } from "../../../shared/format";
 import { fixedExternalId, payDate } from "../../../shared/obligaciones";
+import { getDollarQuote } from "../../../shared/dollar";
 import {
-  FIXED_EXPENSE_CATEGORY, amountFromRow, fixedFromRow, fixedPaymentFromRow, fixedRowsFor, mergeAmountChanges, scheduled,
+  FIXED_EXPENSE_CATEGORY, amountFromRow, fixedDetailColumns, fixedFromRow, fixedPaymentFromRow, fixedRowsFor, mergeAmountChanges, scheduled,
   type AmountChange, type AmountRow, type Fixed, type FixedInput, type FixedPayment, type FixedPaymentRow, type FixedRow, type FixedRowView,
 } from "../../../shared/fijos";
 import { addLinkedExpense, removeLinkedExpense } from "./obligations";
@@ -22,6 +23,10 @@ export function useFixed(userId: string, month: string) {
   const payments = paid.useValue(payKey);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  // Lo que se paga en dólares se compra: se pasa a pesos con la cotización de venta.
+  const [usdRate, setUsdRate] = useState<number | null>(null);
+  const hasUsd = data.items.some((item) => item.currency === "USD");
+  useEffect(() => { if (hasUsd) getDollarQuote().then((quote) => setUsdRate(quote?.sell ?? null)); }, [hasUsd]);
 
   const loadBase = useCallback(async () => {
     if (!supabase) return;
@@ -50,7 +55,7 @@ export function useFixed(userId: string, month: string) {
     setRefreshing(false);
   }, [loadBase, loadPayments]);
 
-  const rows: FixedRowView[] = useMemo(() => fixedRowsFor(data.items, payments, data.changes, month), [data, payments, month]);
+  const rows: FixedRowView[] = useMemo(() => fixedRowsFor(data.items, payments, data.changes, month, usdRate), [data, payments, month, usdRate]);
 
   // Las acciones que fallan avisan arriba de la pantalla (la lista puede estar scrolleada); el error fijo queda para la carga.
   const fail = (message: string) => { toast(message + " Revisá tu conexión."); return false; };
@@ -83,7 +88,7 @@ export function useFixed(userId: string, month: string) {
 
   const create = async (input: FixedInput) => {
     if (!supabase) return false;
-    const { data: row, error: saveError } = await supabase.from("fixed_expenses").insert({ user_id: userId, name: input.name, amount: input.amount, category: input.category, due_day: input.dueDay, start_month: month }).select().single();
+    const { data: row, error: saveError } = await supabase.from("fixed_expenses").insert({ user_id: userId, name: input.name, amount: input.amount, category: input.category, due_day: input.dueDay, start_month: month, ...fixedDetailColumns(input) }).select().single();
     if (saveError || !row) return fail("No se pudo guardar el gasto fijo.");
     setError("");
     setItems((current) => [...current, fixedFromRow(row as FixedRow)]);
@@ -93,13 +98,15 @@ export function useFixed(userId: string, month: string) {
   // Cambiar un fijo: el monto nuevo vale "desde" este mes en adelante, o "solo" para este mes.
   const update = async (item: Fixed, input: FixedInput & { scope: "desde" | "solo" }) => {
     if (!supabase) return false;
-    const { error: saveError } = await supabase.from("fixed_expenses").update({ name: input.name, category: input.category, due_day: input.dueDay }).eq("id", item.id);
-    if (saveError) return fail("No se pudo guardar el gasto fijo.");
-    setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, name: input.name, category: input.category, dueDay: input.dueDay } : entry)));
+    const { data: updated, error: saveError } = await supabase.from("fixed_expenses").update({ name: input.name, category: input.category, due_day: input.dueDay, ...fixedDetailColumns(input) }).eq("id", item.id).select().single();
+    if (saveError || !updated) return fail("No se pudo guardar el gasto fijo.");
+    setItems((current) => current.map((entry) => (entry.id === item.id ? fixedFromRow(updated as FixedRow) : entry)));
 
     const changes = base.get(userId).changes;
     const payment = paid.get(payKey).find((entry) => entry.fixedId === item.id);
-    const current = payment?.amount ?? scheduled(item, changes, month);
+    // En dólares se compara contra lo programado: el pago guardado está en pesos.
+    const inUsd = input.currency === "USD" || item.currency === "USD";
+    const current = inUsd ? scheduled(item, changes, month) : payment?.amount ?? scheduled(item, changes, month);
     if (input.amount !== current) {
       const nextMonth = shiftMonth(month, 1);
       const nextBefore = scheduled(item, changes, nextMonth);
@@ -113,7 +120,7 @@ export function useFixed(userId: string, month: string) {
       }
       const saved = ((savedRows ?? []) as AmountRow[]).map(amountFromRow);
       base.set(userId, (state) => ({ ...state, changes: mergeAmountChanges(state.changes, item.id, saved, input.scope, month) }));
-      if (payment) {
+      if (payment && !inUsd) {
         const { error: paymentError } = await supabase.from("fixed_expense_payments").update({ amount: input.amount }).eq("fixed_expense_id", item.id).eq("month", month);
         if (paymentError) return fail("No se pudo actualizar el pago de este mes.");
         await supabase.from("movements").update({ amount: input.amount, description: input.name }).eq("external_id", fixedExternalId(item.id, month));

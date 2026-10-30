@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { money, monthLabel, usd } from "../../../shared/format";
 import { currentCycle } from "../../../shared/cobro";
 import { useMiCobro } from "../lib/cobro";
-import { FIXED_LABELS, type FixedRowView } from "../../../shared/fijos";
+import { FIXED_LABELS, countedFixedRows, type FixedRowView } from "../../../shared/fijos";
 import { cardMonthSummary, installmentNumber, itemsForMonth, lastMonth, type CardItem, type CardPayment, type CardStatement, type CreditCard } from "../../../shared/tarjetas";
 import { useAuth } from "../lib/auth";
 import { useCards } from "../lib/cards";
@@ -15,7 +15,7 @@ import { Fab } from "../components/Fab";
 import { Icon } from "../components/Icon";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { FIXED_ICONS, PaidCheck, close, confirmAction } from "../components/fixedUi";
-import { Button, Card, ErrorBox, IconButton, MonthPicker, Segmented, T, styles } from "../components/ui";
+import { Button, Card, CategoryIcon, ErrorBox, IconButton, MonthPicker, Segmented, T, styles } from "../components/ui";
 
 export default function FixedScreen() {
   const { session } = useAuth();
@@ -38,9 +38,10 @@ function FixedAndCards({ userId }: { userId: string }) {
   const monthName = monthLabel(month).toLowerCase();
 
   const summaries = cards.map((card) => ({ card, summary: cardMonthSummary(items, statements, card.id, month, payments) }));
-  const fixedTotal = fixed.rows.reduce((sum, row) => sum + row.amount, 0);
+  const counted = countedFixedRows(fixed.rows, statements, month);
+  const fixedTotal = counted.reduce((sum, row) => sum + row.amount, 0);
   const cardsTotal = summaries.reduce((sum, entry) => sum + entry.summary.total, 0);
-  const paidTotal = fixed.rows.filter((row) => row.paid).reduce((sum, row) => sum + row.amount, 0) + summaries.filter((entry) => entry.summary.payment).reduce((sum, entry) => sum + entry.summary.total, 0);
+  const paidTotal = counted.filter((row) => row.paid).reduce((sum, row) => sum + row.amount, 0) + summaries.filter((entry) => entry.summary.payment).reduce((sum, entry) => sum + entry.summary.total, 0);
   const total = fixedTotal + cardsTotal;
 
   const refresh = () => { fixed.reload(); cardsData.reload(); };
@@ -93,7 +94,7 @@ function FixedAndCards({ userId }: { userId: string }) {
               <Card style={{ paddingVertical: 24 }}><T variant="small" style={{ textAlign: "center", fontSize: 14 }}>No hay gastos fijos en {monthName}. Agregá alquiler, luz o gimnasio con el botón +.</T></Card>
             ) : (
               <Card style={{ paddingVertical: 4 }}>
-                {fixed.rows.map((row, index) => <FixedRow key={row.item.id} row={row} first={index === 0} onToggle={() => toggleFixed(row)} onEdit={() => editFixed(row)} />)}
+                {fixed.rows.map((row, index) => <FixedRow key={row.item.id} row={row} first={index === 0} cardName={cards.find((card) => card.id === row.item.cardId)?.name} onToggle={() => toggleFixed(row)} onEdit={() => editFixed(row)} />)}
               </Card>
             )}
           </>
@@ -134,22 +135,25 @@ function SectionTitle({ icon, label, total }: { icon: string; label: string; tot
   );
 }
 
-function FixedRow({ row, first, onToggle, onEdit }: { row: FixedRowView; first: boolean; onToggle: () => void; onEdit: () => void }) {
+function FixedRow({ row, first, cardName, onToggle, onEdit }: { row: FixedRowView; first: boolean; cardName?: string; onToggle: () => void; onEdit: () => void }) {
   const colors = useColors();
   const { item } = row;
   return (
     <View style={[styles.row, { paddingVertical: 8, borderTopWidth: first ? 0 : 1, borderTopColor: colors.border }]}>
       <PaidCheck paid={row.paid} label={row.paid ? "Marcar " + item.name + " como pendiente" : "Pagar " + item.name} onPress={onToggle} />
       <Pressable accessibilityRole="button" accessibilityLabel={"Editar " + item.name + ", " + money(row.amount)} onPress={onEdit} style={({ pressed }) => [styles.row, { flex: 1, minHeight: 48, opacity: pressed ? 0.7 : 1 }]}>
-        <View style={{ width: 40, height: 40, borderRadius: 16, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
-          <Icon name={FIXED_ICONS[item.category]} size={19} color={colors.primaryText} />
-        </View>
+        {item.provider ? <ProviderIcon name={item.name} color={item.color ?? colors.primary} provider={item.provider} /> : item.icon ? <CategoryIcon category={{ icon: item.icon, color: item.color ?? colors.primary }} /> : (
+          <View style={{ width: 40, height: 40, borderRadius: 16, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
+            <Icon name={FIXED_ICONS[item.category]} size={19} color={colors.primaryText} />
+          </View>
+        )}
         <View style={{ flex: 1, minWidth: 0 }}>
           <T numberOfLines={1} color={row.paid ? colors.muted : undefined} style={{ fontWeight: "600" }}>{item.name}</T>
-          <T variant="small" numberOfLines={1}>{FIXED_LABELS[item.category]} · vence el {item.dueDay}{row.paid ? " · pagado" : ""}</T>
+          <T variant="small" numberOfLines={1}>{cardName ? "En tarjeta " + cardName : FIXED_LABELS[item.category]} · vence el {item.dueDay}{item.variable ? " · varía" : ""}{row.paid ? " · pagado" : ""}</T>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={{ fontSize: 15, fontWeight: "700", color: colors.text, fontVariant: ["tabular-nums"] }}>{money(row.amount)}</Text>
+          <Text style={{ fontSize: 15, fontWeight: "700", color: colors.text, fontVariant: ["tabular-nums"] }}>{row.usd !== null && !row.paid && row.amount === 0 ? usd(row.usd) : money(row.amount)}</Text>
+          {row.usd !== null ? <T variant="small">{usd(row.usd)}</T> : null}
           {row.previous !== null ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
               <Icon name={row.amount > row.previous ? "TrendingUp" : "TrendingDown"} size={12} color={colors.muted} />

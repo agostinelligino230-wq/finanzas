@@ -20,15 +20,20 @@ export function textoDelAviso(mov: MovimientoAvisado, entidad: string) {
 }
 
 export async function avisarApp(admin: SupabaseClient, userId: string, mov: MovimientoAvisado, entidad: string, recibido: Date) {
-  if (!ON || Date.now() - recibido.getTime() > RECIENTE_MS) return;
+  if (Date.now() - recibido.getTime() > RECIENTE_MS) return;
+  await enviarPush(admin, userId, textoDelAviso(mov, entidad), "/");
+}
+
+// Manda un aviso a todos los celulares de la persona. Nunca frena lo que venía haciendo quien lo llama.
+export async function enviarPush(admin: SupabaseClient, userId: string, { title, body }: { title: string; body: string }, url: string) {
+  if (!ON) return;
   try {
     const { data: tokens } = await admin.from("push_tokens").select("token").eq("user_id", userId);
     if (!tokens?.length) return;
-    const { title, body } = textoDelAviso(mov, entidad);
     const response = await fetch(EXPO_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json", ...(EXPO_TOKEN ? { Authorization: "Bearer " + EXPO_TOKEN } : {}) },
-      body: JSON.stringify(tokens.map(({ token }) => ({ to: token, title, body, sound: "default", channelId: "movimientos", data: { url: "/" } }))),
+      body: JSON.stringify(tokens.map(({ token }) => ({ to: token, title, body, sound: "default", channelId: "movimientos", data: { url } }))),
       signal: AbortSignal.timeout(5000),
     });
     const result = await response.json().catch(() => null) as { data?: { status?: string; details?: { error?: string } }[] } | null;
@@ -36,7 +41,6 @@ export async function avisarApp(admin: SupabaseClient, userId: string, mov: Movi
     const dead = (result?.data ?? []).flatMap((ticket, index) => (ticket?.status === "error" && ticket.details?.error === "DeviceNotRegistered" ? [tokens[index].token] : []));
     if (dead.length) await admin.from("push_tokens").delete().in("token", dead);
   } catch (error) {
-    // El aviso nunca frena la carga del movimiento.
-    console.error("avisarApp", error instanceof Error ? error.message : error);
+    console.error("enviarPush", error instanceof Error ? error.message : error);
   }
 }

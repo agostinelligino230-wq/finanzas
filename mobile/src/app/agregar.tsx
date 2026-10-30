@@ -3,7 +3,7 @@ import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, T
 import { Redirect, router, useLocalSearchParams, usePreventRemove } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { dayText, daysAgoISO, money, parseAmount, parseDay, todayISO } from "../../../shared/format";
-import { COLORS, ICON_GROUPS } from "../../../shared/categorias";
+import { COLORS } from "../../../shared/categorias";
 import { getDollarQuote, type DollarQuote } from "../../../shared/dollar";
 import type { Currency, Movement, MovementType } from "../../../shared/movimientos";
 import { useAuth } from "../lib/auth";
@@ -11,6 +11,7 @@ import { useCategories } from "../lib/categories";
 import { useMovements } from "../lib/movements";
 import { radius, useColors } from "../lib/theme";
 import { Icon } from "../components/Icon";
+import { IconColorPicker } from "../components/IconColorPicker";
 import { toast } from "../components/Toast";
 import { Button, CategoryIcon, ErrorBox, Field, IconButton, Loading, Segmented, T, styles } from "../components/ui";
 
@@ -228,18 +229,7 @@ function CategoryCreator({ kind, onCreate, onCancel }: { kind: MovementType; onC
         <CategoryIcon category={{ icon, color }} size={44} />
         <View style={{ flex: 1 }}><Field value={name} onChangeText={setName} placeholder={kind === "gasto" ? "Ej.: Plataformas" : "Ej.: Alquiler cobrado"} autoFocus accessibilityLabel="Nombre de la categoría" /></View>
       </View>
-      <T variant="label">Color</T>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {COLORS.map((value) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: color === value }} accessibilityLabel={"Color " + value} onPress={() => setColor(value)} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: value, alignItems: "center", justifyContent: "center" }}>{color === value ? <Icon name="Check" size={16} color="#ffffff" /> : null}</Pressable>)}
-      </View>
-      {ICON_GROUPS.map((group) => (
-        <View key={group.label} style={{ gap: 6 }}>
-          <T variant="label">{group.label}</T>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {group.icons.map((item) => { const active = icon === item; return <Pressable key={item} accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={item} onPress={() => setIcon(item)} style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: "center", justifyContent: "center", borderColor: active ? color : colors.border, backgroundColor: active ? color : "transparent" }}><Icon name={item} size={18} color={active ? "#ffffff" : colors.text} /></Pressable>; })}
-          </View>
-        </View>
-      ))}
+      <IconColorPicker icon={icon} color={color} onChange={(value) => { setIcon(value.icon); setColor(value.color); }} />
       <ErrorBox message={error} />
       <View style={{ flexDirection: "row", gap: 8 }}>
         <Button label="Cancelar" variant="secondary" onPress={onCancel} style={{ flex: 1 }} />

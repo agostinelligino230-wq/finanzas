@@ -55,6 +55,10 @@ object Almacen {
   fun activar(context: Context, activo: Boolean) = prefs(context).edit().putBoolean("activo", activo).apply()
   fun activo(context: Context) = prefs(context).getBoolean("activo", false)
 
+  // Interruptor «Guardar dónde hice cada gasto» de la app (prendido hasta que la persona lo apague).
+  fun activarUbicacion(context: Context, activa: Boolean) = prefs(context).edit().putBoolean("ubicacion", activa).apply()
+  fun ubicacionActiva(context: Context) = prefs(context).getBoolean("ubicacion", true)
+
   fun marcarEscuchando(context: Context, escuchando: Boolean) = prefs(context).edit().putBoolean("escuchando", escuchando).apply()
   fun escuchando(context: Context) = prefs(context).getBoolean("escuchando", false)
 

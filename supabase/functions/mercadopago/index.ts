@@ -250,7 +250,7 @@ async function searchPayments(access: string, days: number, filtro: string) {
   return { items, error: null as string | null };
 }
 
-type Leido = { tipo: "gasto" | "ingreso" | null; monto: number; descripcion: string; categoria: string; nota?: string };
+type Leido = { tipo: "gasto" | "ingreso" | null; monto: number; descripcion: string; categoria: string; nota?: string; contraparte?: string };
 
 const nombreDe = (persona?: Record<string, unknown> | null) => {
   if (!persona) return "";
@@ -277,13 +277,13 @@ function leerPago(pago: Pago, me: string): Leido {
   if (cobrador === me) {
     const quien = nombreDe(bank?.payer) || nombreDe(pago.payer as Record<string, unknown>);
     const descripcion = tipoOp === "money_transfer" ? (quien ? "Transferencia de " + quien : "Transferencia recibida") : (texto || "Cobro") + (quien ? " · " + quien : "");
-    return { ...base, tipo: "ingreso", descripcion: descripcion + " (Mercado Pago)" };
+    return { ...base, tipo: "ingreso", descripcion: descripcion + " (Mercado Pago)", contraparte: quien };
   }
   if (pagador === me) {
     const quien = nombreDe(bank?.collector) || nombreDe(pago.collector as Record<string, unknown>);
     const descripcion = tipoOp === "money_transfer" ? (quien ? "Transferencia a " + quien : "Transferencia enviada") : texto || quien || "Pago";
     const pagado = Number(pago.transaction_details?.total_paid_amount ?? 0);
-    return { ...base, monto: pagado > monto ? pagado : monto, tipo: "gasto", descripcion: descripcion + " (Mercado Pago)" };
+    return { ...base, monto: pagado > monto ? pagado : monto, tipo: "gasto", descripcion: descripcion + " (Mercado Pago)", contraparte: quien };
   }
   return { ...base, tipo: null, descripcion: texto || "Pago", nota: "no figurás como quien paga ni quien cobra" };
 }
@@ -312,7 +312,7 @@ async function comparar(userId: string, days: number, detalle: Item[]) {
 async function ingresar(userId: string, leido: Leido, aviso: { clave: string; titulo: string; cuando: Date; opRef: string | null; idExterno: string; cuerpo: string }): Promise<{ estado: string; movimiento: string | null }> {
   const movimiento = leido.tipo ? {
     type: leido.tipo, amount: Math.round(leido.monto * 100) / 100, currency: "ARS", description: leido.descripcion.slice(0, 120), category: leido.categoria,
-    source: "mercadopago", external_id: aviso.idExterno, op_ref: aviso.opRef, date: day(aviso.cuando), datetime: aviso.cuando.toISOString(), trust: TRUST_NUEVOS,
+    source: "mercadopago", external_id: aviso.idExterno, op_ref: aviso.opRef, date: day(aviso.cuando), datetime: aviso.cuando.toISOString(), trust: TRUST_NUEVOS, counterparty_name: leido.contraparte || null,
   } : null;
   const notice = {
     channel: "api", provider: "mercadopago", notice_key: aviso.clave, authentic: true, auth_detail: { via: "api-mercadopago" },
